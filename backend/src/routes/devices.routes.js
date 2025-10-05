@@ -1,16 +1,15 @@
-// backend/src/routes/devices.routes.js
 const express = require('express');
 const router = express.Router();
 const devicesCtrl = require('../controllers/devices.controller');
-const auth = require('../middleware/auth.middleware'); // usa o teu middleware existente
+const auth = require('../middleware/auth');
 
-// Rota protegida — apenas admin
-router.get('/', auth.adminOnly, devicesCtrl.listDevices);
+// 🔸 Lista pública (teste)
+router.get('/public', devicesCtrl.publicList);
 
-// Detalhe de um device — admin ou device (se implementares)
-router.get('/:deviceId', auth.adminOnly, devicesCtrl.getDevice);
+// 🔸 Lista de dispositivos (apenas admin)
+router.get('/', auth.adminOnly, devicesCtrl.getAllDevices);
 
-// Rota pública de debug (opcional) — remover depois de testar
-router.get('/public', devicesCtrl.listDevices);
+// 🔸 Obter um dispositivo específico (admin ou o próprio device)
+router.get('/:deviceId', auth.adminOrDevice, devicesCtrl.getDeviceById);
 
 module.exports = router;
