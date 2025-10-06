@@ -1,6 +1,0 @@
-body { font-family: Arial, sans-serif; margin:0; padding:0; background:#f6f6f6; color:#222;}
-.topbar { padding:10px 16px; background:#2d6cdf; color:white; display:flex; justify-content:space-between; align-items:center;}
-.container { padding:16px; display:grid; gap:16px; }
-.center { width:320px; margin:80px auto; padding:20px; background:white; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
-input, button { padding:8px; margin:6px 0; width:100%; box-sizing:border-box; }
-section { background:white; padding:12px; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
