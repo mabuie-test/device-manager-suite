@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/><title>Admin Dashboard</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Admin Dashboard</h1>
+      <div>
+        <button id="logout">Logout</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Devices</h3>
+        <pre id="devices">Loading...</pre>
+      </div>
+
+      <div class="card">
+        <h3>Payments</h3>
+        <pre id="payments">Loading...</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (async function(){
+      const token = localStorage.getItem('auth_token');
+      if (!token) { alert('Not logged'); location.href='/'; return; }
+      const headers = { 'Authorization': 'Bearer ' + token };
+
+      async function load(){
+        const dv = await fetch('/api/devices', { headers }).then(r=>r.json());
+        document.getElementById('devices').innerText = JSON.stringify(dv, null, 2);
+
+        const pv = await fetch('/api/payments', { headers }).then(r=>r.json());
+        document.getElementById('payments').innerText = JSON.stringify(pv, null, 2);
+      }
+
+      document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/'; });
+
+      load();
+      // optionally poll every 10s
+      setInterval(load, 10000);
+    })();
+  </script>
+</body>
+</html>
