@@ -7,4 +7,7 @@ router.post('/register', ctrl.register);
 router.post('/login', ctrl.login);
 router.get('/me', authmw.requireAuth, ctrl.me);
 
+// rota para registar admins (verifica x-admin-secret ou token admin)
+router.post('/register-admin', ctrl.registerAdmin);
+
 module.exports = router;
