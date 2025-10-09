@@ -18,9 +18,21 @@ exports.create = async (req, res) => {
 exports.list = async (req, res) => {
   try {
     const payments = await Payment.find().sort({ createdAt: -1 }).populate('user','email name').lean();
-    res.json({ ok:true, payments });
+    res.json({ ok: true, payments });
   } catch (err) {
     console.error('payments.list error', err);
+    res.status(500).json({ ok:false, error:'server_error' });
+  }
+};
+
+exports.listMine = async (req, res) => {
+  try {
+    const userId = req.user && req.user.id;
+    if (!userId) return res.status(401).json({ ok:false, error:'not_authenticated' });
+    const payments = await Payment.find({ user: userId }).sort({ createdAt: -1 }).lean();
+    res.json({ ok:true, payments });
+  } catch (err) {
+    console.error('payments.listMine error', err);
     res.status(500).json({ ok:false, error:'server_error' });
   }
 };
@@ -37,16 +49,17 @@ exports.process = async (req, res) => {
       payment.processedBy = req.user.id;
       await payment.save();
       await User.updateOne({_id: payment.user}, { $set: { active: true }});
-      return res.json({ ok:true });
+      return res.json({ ok: true });
     } else {
       payment.status = 'rejected';
       payment.processedAt = new Date();
       payment.processedBy = req.user.id;
       await payment.save();
-      return res.json({ ok:true });
+      return res.json({ ok: true });
     }
   } catch (err) {
     console.error('payments.process error', err);
     res.status(500).json({ ok:false, error:'server_error' });
   }
 };
+      
