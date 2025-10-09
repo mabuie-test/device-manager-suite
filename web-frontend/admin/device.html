@@ -6,43 +6,65 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <style>#map{height:500px}</style>
+  <style>#map{height:420px;margin-bottom:8px}</style>
 </head>
 <body>
   <div class="container">
-    <h1>Device</h1>
-    <p><a href="/admin/index.html">Back</a> <button id="logout">Logout</button></p>
-    <div id="info" class="card small">Loading...</div>
+    <header style="display:flex;justify-content:space-between">
+      <h1>Device</h1>
+      <div><a href="/admin/index.html">Back</a> <button id="logout">Logout</button></div>
+    </header>
+
+    <div class="card" id="deviceInfo">Loading device...</div>
     <div id="map" class="card"></div>
-    <h3>History</h3>
-    <pre id="history">Loading...</pre>
+    <div class="card">
+      <h3>History</h3>
+      <ul id="historyList" style="list-style:none;padding-left:0"></ul>
+    </div>
   </div>
 
+  <script src="/js/api.js"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const deviceId = params.get('deviceId');
-    const token = localStorage.getItem('auth_token');
     if (!deviceId) { alert('deviceId missing'); location.href='/admin/index.html'; }
+    const token = localStorage.getItem('auth_token');
     if (!token) { alert('not logged'); location.href='/'; }
 
     const headers = { 'Authorization': 'Bearer ' + token };
 
-    async function loadHistory(){
-      const r = await fetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/history', { headers }).then(r=>r.json());
-      document.getElementById('history').innerText = JSON.stringify(r, null, 2);
-      return r.items || [];
-    }
-
     async function loadDevice(){
-      const r = await fetch('/api/devices/' + encodeURIComponent(deviceId), { headers }).then(r=>r.json());
-      document.getElementById('info').innerText = JSON.stringify(r, null, 2);
-      return r.device || null;
+      const r = await apiFetch('/api/devices/' + encodeURIComponent(deviceId), { method:'GET' });
+      const el = document.getElementById('deviceInfo');
+      if (!r.ok) { el.innerText = 'Erro: ' + (r.error || JSON.stringify(r)); return; }
+      const d = r.device;
+      el.innerHTML = `<strong>DeviceId:</strong> ${d.deviceId} <br>
+                      <strong>Name:</strong> ${d.name || '-'} <br>
+                      <strong>Owner:</strong> ${d.owner || '-'} <br>
+                      <strong>Last seen:</strong> ${d.lastSeen ? new Date(d.lastSeen).toLocaleString() : '-'}`;
     }
 
+    // history
+    async function loadHistory(){
+      const r = await apiFetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/history', { method:'GET' });
+      const ul = document.getElementById('historyList');
+      ul.innerHTML = '';
+      if (!r.ok) { ul.innerHTML = '<li>Erro: ' + (r.error||JSON.stringify(r)) + '</li>'; return; }
+      r.items.forEach(item => {
+        const li = document.createElement('li');
+        const ts = new Date(item.ts).toLocaleString();
+        const payload = JSON.stringify(item.payload);
+        li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee"><small class="small">${ts}</small><div>${payload}</div></div>`;
+        ul.appendChild(li);
+      });
+      return r.items;
+    }
+
+    // map init
     let map, marker;
-    function initMap(lat=0, lon=0){
-      if(!map) {
-        map = L.map('map').setView([lat, lon], 13);
+    function initMap(lat=0, lon=0) {
+      if (!map) {
+        map = L.map('map').setView([lat, lon], lat===0&&lon===0?2:13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
         marker = L.marker([lat, lon]).addTo(map);
       } else {
@@ -54,28 +76,31 @@
     (async function(){
       await loadDevice();
       const items = await loadHistory();
-      if (items.length > 0) {
-        const p = items[0].payload && items[0].payload.location;
-        if (p && p.lat && p.lon) initMap(p.lat, p.lon);
-      } else {
-        initMap(0,0);
-      }
+      if (items && items.length>0) {
+        const first = items[0];
+        const loc = first.payload && first.payload.location;
+        if (loc && loc.lat && loc.lon) initMap(loc.lat, loc.lon);
+        else initMap(0,0);
+      } else initMap(0,0);
 
-      // socket.io realtime
+      // socket
       const socket = io();
       socket.emit('join_device_room', deviceId);
       socket.on('telemetry', (data) => {
         if (data && data.payload && data.payload.location) {
           const loc = data.payload.location;
           initMap(loc.lat, loc.lon);
-          // prepend to history
-          const pre = document.getElementById('history');
-          pre.innerText = data.ts + ' ' + JSON.stringify(data.payload) + "\\n" + pre.innerText;
+          const ul = document.getElementById('historyList');
+          const li = document.createElement('li');
+          li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee"><small class="small">${new Date(data.ts).toLocaleString()}</small><div>${JSON.stringify(data.payload)}</div></div>`;
+          ul.insertBefore(li, ul.firstChild);
         }
       });
 
-      document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/'; });
+      document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
+
     })();
   </script>
 </body>
-</html>
+                                                         </html>
+                  
