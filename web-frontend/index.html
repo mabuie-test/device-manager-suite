@@ -30,21 +30,12 @@
     </div>
   </div>
 
+  <script src="/js/api.js"></script>
   <script>
-    async function api(path, opts = {}) {
-      opts.headers = opts.headers || {};
-      if (!opts.headers['Content-Type'] && !(opts.body instanceof FormData)) opts.headers['Content-Type'] = 'application/json';
-      const token = localStorage.getItem('auth_token');
-      if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-      if (opts.body && opts.headers['Content-Type'] === 'application/json') opts.body = JSON.stringify(opts.body);
-      const r = await fetch('/api' + path, opts);
-      return r.json();
-    }
-
     document.getElementById('btnLogin').addEventListener('click', async () => {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
-      const res = await api('/auth/login', { method:'POST', body: { email, password } });
+      const res = await apiFetch('/api/auth/login', { method:'POST', body: { email, password } });
       if (res.token) {
         localStorage.setItem('auth_token', res.token);
         localStorage.setItem('role', res.role);
@@ -59,7 +50,7 @@
       const email = document.getElementById('r_email').value;
       const name = document.getElementById('r_name').value;
       const password = document.getElementById('r_password').value;
-      const res = await api('/auth/register', { method:'POST', body: { email, name, password } });
+      const res = await apiFetch('/api/auth/register', { method:'POST', body: { email, name, password } });
       if (res.ok) {
         document.getElementById('regMsg').innerText = 'Registrado. Faz login.';
       } else {
@@ -68,4 +59,5 @@
     });
   </script>
 </body>
-</html>
+    </html>
+          
