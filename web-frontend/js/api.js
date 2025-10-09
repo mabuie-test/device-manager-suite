@@ -1,5 +1,5 @@
 // simple api helper
-const API_BASE = 'spymb.onrender.com';
+const API_BASE = '';
 
 function getAuthToken() {
   return localStorage.getItem('auth_token') || null;
