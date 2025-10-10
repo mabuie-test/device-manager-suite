@@ -1,4 +1,4 @@
-<!doctype html>
+ <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/><title>Mapa do Dispositivo</title>
@@ -6,11 +6,15 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <style>#map{height:480px}</style>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    #map { height: 64vh; min-height: 320px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+    .small{font-size:0.9em;color:#666}
+  </style>
 </head>
 <body>
   <div class="container">
-    <header style="display:flex;justify-content:space-between">
+    <header style="display:flex;justify-content:space-between;align-items:center;margin:12px 0">
       <h1>Mapa</h1>
       <div><a href="/user/dashboard.html">Voltar</a> <button id="logout">Logout</button></div>
     </header>
@@ -18,64 +22,95 @@
     <div class="card">
       <label>DeviceId: <input id="deviceId" /></label>
       <button id="btnLoad">Carregar</button>
+      <p class="small">Os pinos mostram hora e link para Google Maps (abre em nova aba).</p>
     </div>
 
     <div id="map" class="card"></div>
+
     <div class="card"><h3>Últimos pontos</h3><ul id="list" style="list-style:none;padding-left:0"></ul></div>
   </div>
 
   <script src="/js/api.js"></script>
   <script>
-    if (!localStorage.getItem('auth_token')) location.href = '/';
+    const token = localStorage.getItem('auth_token');
+    if (!token) location.href = '/';
     document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
 
     const params = new URLSearchParams(window.location.search);
     if (params.get('deviceId')) document.getElementById('deviceId').value = params.get('deviceId');
 
-    let map, marker;
-    function initMap(lat=0, lon=0) {
-      if (!map) {
-        map = L.map('map').setView([lat, lon], lat===0&&lon===0?2:13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        marker = L.marker([lat, lon]).addTo(map);
-      } else {
-        map.setView([lat, lon], 13);
-        marker.setLatLng([lat, lon]);
-      }
+    // map init
+    let map = L.map('map').setView([0,0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+    let markers = [];
+    function addMarker(lat, lon, accuracy, ts, popupHtml) {
+      try {
+        const m = L.marker([lat, lon]).addTo(map);
+        m.bindPopup(popupHtml);
+        markers.push(m);
+        return m;
+      } catch (e) { console.error('addMarker err', e); return null; }
     }
+    function clearMarkers() { markers.forEach(m => map.removeLayer(m)); markers = []; }
 
     async function load() {
       const deviceId = document.getElementById('deviceId').value.trim();
       if (!deviceId) return alert('DeviceId required');
       const r = await apiFetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/items?type=telemetry', { method:'GET' });
-      const ul = document.getElementById('list');
-      ul.innerHTML = '';
+      const ul = document.getElementById('list'); ul.innerHTML = '';
+      clearMarkers();
       if (!r.ok) { ul.innerHTML = '<li>Erro: ' + JSON.stringify(r) + '</li>'; return; }
       const items = r.items || [];
-      items.forEach(it => {
-        const li = document.createElement('li');
-        const ts = new Date(it.ts).toLocaleString();
-        const payload = it.payload || it;
-        let html = `<small>${ts}</small><div>${JSON.stringify(payload)}</div>`;
-        li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee">${html}</div>`;
-        ul.appendChild(li);
-      });
-      if (items.length > 0 && items[0].payload && items[0].payload.location) {
-        const loc = items[0].payload.location;
-        initMap(loc.lat, loc.lon);
-      } else initMap(0,0);
+      if (items.length === 0) { ul.innerHTML = '<li>Nenhum ponto</li>'; map.setView([0,0],2); return; }
 
-      // socket realtime
+      const bounds = [];
+      items.forEach(it => {
+        const ts = it.ts || (it.payload && it.payload.ts) || Date.now();
+        const payload = it.payload || {};
+        const loc = payload.location || {};
+        const lat = parseFloat(loc.lat);
+        const lon = parseFloat(loc.lon);
+        if (isFinite(lat) && isFinite(lon)) {
+          const timeStr = new Date(ts).toLocaleString();
+          const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+          const popup = `<div style="min-width:180px"><div><strong>${timeStr}</strong></div><div>Accuracy: ${loc.accuracy||'-'}</div><div style="margin-top:6px"><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div></div>`;
+          addMarker(lat, lon, loc.accuracy, ts, popup);
+          bounds.push([lat, lon]);
+
+          const li = document.createElement('li');
+          li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee"><small>${timeStr}</small><div>Lat: ${lat.toFixed(6)} Lon: ${lon.toFixed(6)}</div><div><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div></div>`;
+          ul.appendChild(li);
+        }
+      });
+
+      if (bounds.length > 0) {
+        try {
+          map.fitBounds(bounds, { maxZoom: 16, padding: [40,40] });
+        } catch (e) { map.setView(bounds[0], 13); }
+      }
+
+      // setup realtime socket (join room)
       const socket = io();
       socket.emit('join_device_room', deviceId);
-      socket.on('telemetry', data => {
-        if (data && data.payload && data.payload.location) {
-          const loc = data.payload.location;
-          initMap(loc.lat, loc.lon);
-          const li = document.createElement('li');
-          li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee"><small>${new Date(data.ts).toLocaleString()}</small><div>${JSON.stringify(data.payload)}</div></div>`;
-          ul.insertBefore(li, ul.firstChild);
-        }
+      socket.on('telemetry', (data) => {
+        try {
+          // payload structure: { type:"telemetry", payload:{location:{lat,lon,accuracy}, ts:... } }
+          const p = data.payload || {};
+          const loc = p.location || {};
+          const lat = parseFloat(loc.lat);
+          const lon = parseFloat(loc.lon);
+          if (isFinite(lat) && isFinite(lon)) {
+            const timeStr = new Date(data.ts || p.ts || Date.now()).toLocaleString();
+            const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+            const popup = `<div style="min-width:180px"><div><strong>${timeStr}</strong></div><div>Accuracy: ${loc.accuracy||'-'}</div><div style="margin-top:6px"><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div></div>`;
+            const marker = addMarker(lat, lon, loc.accuracy, data.ts, popup);
+            marker.openPopup();
+            // prepend to list
+            const li = document.createElement('li');
+            li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee"><small>${timeStr}</small><div>Lat: ${lat.toFixed(6)} Lon: ${lon.toFixed(6)}</div><div><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div></div>`;
+            ul.insertBefore(li, ul.firstChild);
+          }
+        } catch (e) { console.error('socket telemetry err', e); }
       });
     }
 
