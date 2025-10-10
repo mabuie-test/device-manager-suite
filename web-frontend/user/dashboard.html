@@ -1,205 +1,287 @@
- <!doctype html>
+  <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Mapa do Dispositivo</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>User Dashboard</title>
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <style>
-    #map { height:480px; border-radius:8px; box-shadow: 0 6px 18px rgba(11,22,39,0.06); }
-    .small { font-size:0.9rem; color:#6b7280; }
-    .loader { display:inline-block;border:3px solid #f3f3f3;border-radius:50%;border-top:3px solid #2563eb;width:14px;height:14px;animation:spin 1s linear infinite;margin-left:8px;vertical-align:middle; }
-    @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
-    .list-item { padding:8px;border-bottom:1px solid #eee }
-    .list-item strong { display:block; margin-bottom:4px }
-    .controls { display:flex; gap:10px; align-items:center; margin-bottom:8px }
-    input#deviceId { padding:8px;border-radius:8px;border:1px solid #e6e9ef }
-    button { padding:8px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff; cursor:pointer }
-    @media (max-width:600px){ #map{height:360px} .controls{flex-direction:column;align-items:stretch} button{width:100%} }
+    .small { font-size:0.9em; color:#666; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media(min-width:900px){ .grid{grid-template-columns: 1fr 1fr;} }
+    .card{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+    input, button { padding:8px; margin:6px 0; width:100%; box-sizing:border-box; }
+    table td, table th { padding:6px; border-bottom:1px solid #eee; }
   </style>
-
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
   <div class="container">
     <header style="display:flex;justify-content:space-between;align-items:center;margin:12px 0">
-      <h1>Mapa</h1>
+      <h1>User Dashboard</h1>
       <div>
-        <a href="/user/dashboard.html">Voltar</a>
         <button id="logout">Logout</button>
       </div>
     </header>
 
-    <div class="card">
-      <div class="controls">
-        <label style="flex:1">DeviceId: <input id="deviceId" placeholder="Cole o deviceId" /></label>
-        <div style="display:flex;gap:8px">
-          <button id="btnLoad">Carregar</button>
-          <span id="status" class="small"></span>
+    <div class="grid">
+      <div class="card">
+        <h3>Profile</h3>
+        <div id="profileHtml">Loading profile...</div>
+      </div>
+
+      <div class="card">
+        <h3>Devices</h3>
+
+        <div class="card" style="margin-bottom:12px">
+          <h4>Reivindicar dispositivo</h4>
+          <label>DeviceId: <input id="claimDeviceId" placeholder="Cole o DeviceId aqui" /></label>
+          <button id="btnClaim">Reivindicar</button>
+          <p id="claimMsg" class="small"></p>
         </div>
+
+        <div style="margin-bottom:8px">
+          <a id="linkMap" href="#" >Ver Mapa</a> |
+          <a id="linkNotifications" href="#">Notificações</a> |
+          <a id="linkMessages" href="#">Mensagens</a> |
+          <a id="linkCalls" href="#">Chamadas</a> |
+          <a id="linkMedia" href="#">Media</a>
+        </div>
+
+        <table id="myDevices" style="width:100%;border-collapse:collapse">
+          <thead><tr><th>DeviceId</th><th>Name</th><th>Last Seen</th><th>Ações</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </div>
 
-    <div id="map" class="card"></div>
-
-    <div class="card">
-      <h3>Últimos pontos</h3>
-      <ul id="list" style="list-style:none;padding-left:0;margin:0"></ul>
+    <div class="card" style="margin-top:12px">
+      <h3>Enviar comprovativo de pagamento</h3>
+      <input id="amount" type="number" placeholder="Amount" />
+      <input id="method" placeholder="Method (e.g. bank transfer)" />
+      <input id="note" placeholder="Note (optional)" />
+      <input id="file" type="file" />
+      <button id="sendPayment">Enviar</button>
+      <p id="payMsg" class="small"></p>
     </div>
+
+    <div class="card" style="margin-top:12px">
+      <h3>Meus Pagamentos</h3>
+      <table id="myPayments" style="width:100%;border-collapse:collapse">
+        <thead><tr><th>ID</th><th>Amount</th><th>Status</th><th>Created</th><th>Comprovativo</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
   </div>
 
   <script src="/js/api.js"></script>
   <script>
-    // redirect to login if not authed
+    // ---------- setup ----------
     const token = localStorage.getItem('auth_token');
-    if (!token) location.href = '/';
+    if (!token) { location.href = '/'; }
 
-    document.getElementById('logout').addEventListener('click', () => { localStorage.clear(); location.href = '/'; });
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
 
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('deviceId')) document.getElementById('deviceId').value = params.get('deviceId');
+    // ---------- helpers ----------
+    function getPrimaryDeviceIdFromTable() {
+      const tbody = document.querySelector('#myDevices tbody');
+      const firstRow = tbody.querySelector('tr');
+      if (!firstRow) return null;
+      const firstCell = firstRow.querySelector('td');
+      if (!firstCell) return null;
+      return firstCell.textContent.trim();
+    }
 
-    // leaflet map state
-    let map = null;
-    let markers = []; // array of L.marker
-    function ensureMap() {
-      if (!map) {
-        map = L.map('map').setView([0,0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+    function openWithTokenBlob(url, filenameHint) {
+      return fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+        .then(async res => {
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || ('status ' + res.status));
+          }
+          return res.blob();
+        })
+        .then(blob => {
+          const urlObj = URL.createObjectURL(blob);
+          window.open(urlObj, '_blank');
+          // revoke later
+          setTimeout(()=> URL.revokeObjectURL(urlObj), 30*60*1000);
+        });
+    }
+
+    // ---------- profile ----------
+    async function loadProfile() {
+      const r = await apiFetch('/api/auth/me', { method:'GET' });
+      const el = document.getElementById('profileHtml');
+      if (!r.ok) { el.innerText = 'Erro: ' + (r.error || JSON.stringify(r)); return; }
+      const user = r.user;
+      el.innerHTML = `
+        <div><strong>Name:</strong> ${user.name || '-'}</div>
+        <div><strong>Email:</strong> ${user.email || '-'}</div>
+        <div><strong>Role:</strong> ${user.role || '-'}</div>
+        <div><strong>Active:</strong> ${user.active ? 'Yes' : 'No'}</div>
+      `;
+      // if not active, add note
+      if (!user.active) el.insertAdjacentHTML('beforeend','<div class="small" style="color:#a00;margin-top:6px">Conta não activa. Paga para ver dados.</div>');
+      return user;
+    }
+
+    // ---------- devices ----------
+    async function loadMyDevices() {
+      const r = await apiFetch('/api/devices/my', { method:'GET' });
+      const tbody = document.querySelector('#myDevices tbody');
+      tbody.innerHTML = '';
+      if (!r.ok) { tbody.innerHTML = '<tr><td colspan="4">Erro: ' + (r.error||JSON.stringify(r)) + '</td></tr>'; return; }
+      r.devices.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${d.deviceId}</td>
+          <td>${d.name || ''}</td>
+          <td>${d.lastSeen ? new Date(d.lastSeen).toLocaleString() : '-'}</td>
+          <td><button data-id="${d.deviceId}" class="btnView">Ver</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // attach handlers (delegated would also work)
+      document.querySelectorAll('.btnView').forEach(b => {
+        b.addEventListener('click', () => {
+          const id = b.getAttribute('data-id');
+          window.location = '/user/device.html?deviceId=' + encodeURIComponent(id);
+        });
+      });
+    }
+
+    // ---------- claim ----------
+    document.getElementById('btnClaim').addEventListener('click', async () => {
+      const id = document.getElementById('claimDeviceId').value.trim();
+      if (!id) { document.getElementById('claimMsg').innerText = 'Insere deviceId'; return; }
+      document.getElementById('claimMsg').innerText = 'A reivindicar...';
+      const res = await apiFetch('/api/devices/' + encodeURIComponent(id) + '/claim', { method: 'POST' });
+      if (res.ok) {
+        document.getElementById('claimMsg').innerText = 'Device reivindicado com sucesso.';
+        document.getElementById('claimDeviceId').value = '';
+        await loadMyDevices();
+      } else {
+        document.getElementById('claimMsg').innerText = 'Erro: ' + (res.error || JSON.stringify(res));
       }
-    }
-    function clearMarkers() {
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
-    }
-    function addMarker(lat, lon, accuracy, ts) {
-      const latN = parseFloat(lat);
-      const lonN = parseFloat(lon);
-      if (!isFinite(latN) || !isFinite(lonN)) return null;
-      const timeStr = new Date(ts || Date.now()).toLocaleString();
-      const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${latN},${lonN}`;
-      const popupHtml = `<div style="min-width:190px"><div><strong>${timeStr}</strong></div><div>Accuracy: ${accuracy||'-'}</div><div style="margin-top:8px"><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div></div>`;
-      const m = L.marker([latN, lonN]).addTo(map);
-      m.bindPopup(popupHtml);
-      markers.push(m);
-      return m;
+    });
+
+    // ---------- payments ----------
+    async function loadMyPayments() {
+      const r = await apiFetch('/api/payments/mine', { method:'GET' });
+      const tbody = document.querySelector('#myPayments tbody');
+      tbody.innerHTML = '';
+      if (!r.ok) { tbody.innerHTML = '<tr><td colspan="5">Erro: ' + (r.error||JSON.stringify(r)) + '</td></tr>'; return; }
+      r.payments.forEach(p => {
+        const tr = document.createElement('tr');
+        const mediaCell = p.mediaFileId
+          ? `<button class="btnViewPaymentMedia" data-fileid="${p.mediaFileId}">Ver</button>`
+          : '-';
+        tr.innerHTML = `
+          <td>${p._id}</td>
+          <td>${p.amount || ''} ${p.currency || ''}</td>
+          <td>${p.status}</td>
+          <td>${new Date(p.createdAt).toLocaleString()}</td>
+          <td>${mediaCell}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // attach handlers for media
+      document.querySelectorAll('.btnViewPaymentMedia').forEach(b => {
+        b.addEventListener('click', async () => {
+          const fileId = b.getAttribute('data-fileid');
+          try {
+            await openWithTokenBlob('/api/media/download/' + encodeURIComponent(fileId));
+          } catch (err) {
+            alert('Erro ao abrir comprovativo: ' + (err.message || err));
+          }
+        });
+      });
     }
 
-    // render list item (prepend if newest)
-    function renderListPrepend(lat, lon, accuracy, ts) {
-      const ul = document.getElementById('list');
-      const timeStr = new Date(ts || Date.now()).toLocaleString();
-      const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
-      const li = document.createElement('li');
-      li.className = 'list-item';
-      li.innerHTML = `<strong>${timeStr}</strong>
-        <div>Lat: ${parseFloat(lat).toFixed(6)} &nbsp; Lon: ${parseFloat(lon).toFixed(6)}</div>
-        <div>Accuracy: ${accuracy||'-'}</div>
-        <div style="margin-top:6px"><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div>`;
-      ul.insertBefore(li, ul.firstChild);
-    }
-
-    // load history and init realtime
-    async function load() {
-      const deviceId = document.getElementById('deviceId').value.trim();
-      const statusEl = document.getElementById('status');
-      if (!deviceId) return alert('DeviceId required');
-
-      statusEl.innerHTML = 'Carregando <span class="loader"></span>';
-      ensureMap();
-      clearMarkers();
-      document.getElementById('list').innerHTML = '';
+    // ---------- send payment (upload file then create) ----------
+    document.getElementById('sendPayment').addEventListener('click', async () => {
+      const fileEl = document.getElementById('file');
+      const amount = parseFloat(document.getElementById('amount').value || 0);
+      const method = document.getElementById('method').value;
+      const note = document.getElementById('note').value;
+      if (fileEl.files.length === 0) { document.getElementById('payMsg').innerText = 'Escolhe um ficheiro'; return; }
+      document.getElementById('payMsg').innerText = 'Enviando...';
+      const form = new FormData();
+      form.append('media', fileEl.files[0]);
 
       try {
-        const r = await apiFetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/items?type=telemetry', { method: 'GET' });
-        if (!r.ok) {
-          statusEl.innerText = 'Erro a carregar histórico';
-          document.getElementById('list').innerHTML = '<li class="list-item">Erro: ' + (r.error || JSON.stringify(r)) + '</li>';
-          return;
-        }
-        const items = r.items || [];
-        // sort ascending by ts so fitBounds natural path (older -> newer)
-        items.sort((a,b) => {
-          const at = a.ts || (a.payload && a.payload.ts) || 0;
-          const bt = b.ts || (b.payload && b.payload.ts) || 0;
-          return (at - bt);
-        });
+        // upload (endpoint must accept Authorization header)
+        const uploadRes = await fetch('/api/media/payment/upload', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + token },
+          body: form
+        }).then(r => r.json());
 
-        const bounds = [];
-        items.forEach(it => {
-          const payload = it.payload || it;
-          const loc = payload.location || {};
-          const lat = parseFloat(loc.lat);
-          const lon = parseFloat(loc.lon);
-          const acc = loc.accuracy;
-          const ts = payload.ts || it.ts || Date.now();
-          if (isFinite(lat) && isFinite(lon)) {
-            addMarker(lat, lon, acc, ts);
-            bounds.push([lat, lon]);
-            // append to list in chronological order; we'll invert view by scrolling later
-            const ul = document.getElementById('list');
-            const li = document.createElement('li');
-            li.className = 'list-item';
-            li.innerHTML = `<strong>${new Date(ts).toLocaleString()}</strong><div>Lat: ${lat.toFixed(6)} Lon: ${lon.toFixed(6)}</div><div>Accuracy: ${acc||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">Abrir no Google Maps</a></div>`;
-            ul.appendChild(li);
-          }
-        });
+        if (!uploadRes.ok) { document.getElementById('payMsg').innerText = 'Upload failed: ' + JSON.stringify(uploadRes); return; }
 
-        if (bounds.length > 0) {
-          try {
-            map.fitBounds(bounds, { padding: [40,40], maxZoom: 16 });
-          } catch (e) { map.setView(bounds[bounds.length-1], 13); }
+        const mediaFileId = uploadRes.fileId;
+        const createRes = await apiFetch('/api/payments', { method:'POST', body: { amount, method, note, mediaFileId } });
+        if (createRes.ok) {
+          document.getElementById('payMsg').innerText = 'Pagamento enviado. ID: ' + createRes.id;
+          fileEl.value = '';
+          document.getElementById('amount').value = '';
+          document.getElementById('method').value = '';
+          document.getElementById('note').value = '';
+          await loadMyPayments();
         } else {
-          map.setView([0,0], 2);
+          document.getElementById('payMsg').innerText = 'Erro ao criar pagamento: ' + JSON.stringify(createRes);
         }
-
-        // realtime socket
-        const socket = io();
-        socket.emit('join_device_room', deviceId);
-        // handle incoming telemetry events
-        socket.off('telemetry'); // remove previous handlers
-        socket.on('telemetry', data => {
-          try {
-            // data: { type: "telemetry", payload: { location: {lat,lon,accuracy}, ts } }
-            const payload = data.payload || {};
-            const loc = payload.location || {};
-            const lat = parseFloat(loc.lat);
-            const lon = parseFloat(loc.lon);
-            const acc = loc.accuracy;
-            const ts = payload.ts || data.ts || Date.now();
-            if (isFinite(lat) && isFinite(lon)) {
-              ensureMap();
-              const m = addMarker(lat, lon, acc, ts);
-              if (m) {
-                m.openPopup();
-                // keep map centered-ish on newest
-                try { map.panTo([lat, lon]); } catch (e) {}
-                // prepend to list
-                renderListPrepend(lat, lon, acc, ts);
-              }
-            }
-          } catch (e) {
-            console.error('socket telemetry err', e);
-          }
-        });
-
-        statusEl.innerText = 'OK';
       } catch (err) {
-        console.error(err);
-        statusEl.innerText = 'Erro na comunicação';
-        document.getElementById('list').innerHTML = '<li class="list-item">Erro: ' + err.message + '</li>';
+        document.getElementById('payMsg').innerText = 'Erro: ' + err.message;
       }
+    });
+
+    // ---------- link handlers (map/notifications/messages/calls/media) ----------
+    // behavior:
+    //  - if user has at least one device, use the first deviceId from the table
+    //  - else prompt for deviceId
+    function chooseDeviceIdOrPrompt() {
+      let id = getPrimaryDeviceIdFromTable();
+      if (!id) id = prompt('Insere o deviceId que queres visualizar:');
+      return id;
     }
 
-    document.getElementById('btnLoad').addEventListener('click', load);
+    document.getElementById('linkMap').addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = chooseDeviceIdOrPrompt();
+      if (id) window.location = '/user/map.html?deviceId=' + encodeURIComponent(id);
+    });
+    document.getElementById('linkNotifications').addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = chooseDeviceIdOrPrompt();
+      if (id) window.location = '/user/notifications.html?deviceId=' + encodeURIComponent(id);
+    });
+    document.getElementById('linkMessages').addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = chooseDeviceIdOrPrompt();
+      if (id) window.location = '/user/messages.html?deviceId=' + encodeURIComponent(id);
+    });
+    document.getElementById('linkCalls').addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = chooseDeviceIdOrPrompt();
+      if (id) window.location = '/user/calls.html?deviceId=' + encodeURIComponent(id);
+    });
+    document.getElementById('linkMedia').addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = chooseDeviceIdOrPrompt();
+      if (id) window.location = '/user/media.html?deviceId=' + encodeURIComponent(id);
+    });
 
-    // auto-load if deviceId provided in query
-    if (document.getElementById('deviceId').value) load();
+    // ---------- init ----------
+    (async function(){
+      await loadProfile();
+      await loadMyDevices();
+      await loadMyPayments();
+    })();
+
   </script>
 </body>
 </html>
