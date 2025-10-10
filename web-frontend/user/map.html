@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/><title>Mapa do Dispositivo</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>#map{height:480px}</style>
+</head>
+<body>
+  <div class="container">
+    <header style="display:flex;justify-content:space-between">
+      <h1>Mapa</h1>
+      <div><a href="/user/dashboard.html">Voltar</a> <button id="logout">Logout</button></div>
+    </header>
+
+    <div class="card">
+      <label>DeviceId: <input id="deviceId" /></label>
+      <button id="btnLoad">Carregar</button>
+    </div>
+
+    <div id="map" class="card"></div>
+    <div class="card"><h3>Últimos pontos</h3><ul id="list" style="list-style:none;padding-left:0"></ul></div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!localStorage.getItem('auth_token')) location.href = '/';
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('deviceId')) document.getElementById('deviceId').value = params.get('deviceId');
+
+    let map, marker;
+    function initMap(lat=0, lon=0) {
+      if (!map) {
+        map = L.map('map').setView([lat, lon], lat===0&&lon===0?2:13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        marker = L.marker([lat, lon]).addTo(map);
+      } else {
+        map.setView([lat, lon], 13);
+        marker.setLatLng([lat, lon]);
+      }
+    }
+
+    async function load() {
+      const deviceId = document.getElementById('deviceId').value.trim();
+      if (!deviceId) return alert('DeviceId required');
+      const r = await apiFetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/items?type=telemetry', { method:'GET' });
+      const ul = document.getElementById('list');
+      ul.innerHTML = '';
+      if (!r.ok) { ul.innerHTML = '<li>Erro: ' + JSON.stringify(r) + '</li>'; return; }
+      const items = r.items || [];
+      items.forEach(it => {
+        const li = document.createElement('li');
+        const ts = new Date(it.ts).toLocaleString();
+        const payload = it.payload || it;
+        let html = `<small>${ts}</small><div>${JSON.stringify(payload)}</div>`;
+        li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee">${html}</div>`;
+        ul.appendChild(li);
+      });
+      if (items.length > 0 && items[0].payload && items[0].payload.location) {
+        const loc = items[0].payload.location;
+        initMap(loc.lat, loc.lon);
+      } else initMap(0,0);
+
+      // socket realtime
+      const socket = io();
+      socket.emit('join_device_room', deviceId);
+      socket.on('telemetry', data => {
+        if (data && data.payload && data.payload.location) {
+          const loc = data.payload.location;
+          initMap(loc.lat, loc.lon);
+          const li = document.createElement('li');
+          li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee"><small>${new Date(data.ts).toLocaleString()}</small><div>${JSON.stringify(data.payload)}</div></div>`;
+          ul.insertBefore(li, ul.firstChild);
+        }
+      });
+    }
+
+    document.getElementById('btnLoad').addEventListener('click', load);
+    if (document.getElementById('deviceId').value) load();
+  </script>
+</body>
+</html>
