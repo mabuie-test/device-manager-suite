@@ -25,6 +25,23 @@ exports.post = async (req, res) => {
     res.status(500).json({ ok:false, error:'server_error' });
   }
 };
+// list by optional type (query param ?type=notification|telemetry|sms|call)
+exports.listByType = async (req, res) => {
+  try {
+    const deviceId = req.params.deviceId;
+    const type = req.query.type; // optional
+    if (!deviceId) return res.status(400).json({ ok:false, error:'missing_device' });
+
+    const q = { deviceId };
+    if (type) q['payload.type'] = type;
+
+    const docs = await Telemetry.find(q).sort({ ts: -1 }).limit(500).lean();
+    res.json({ ok:true, total: docs.length, items: docs });
+  } catch (err) {
+    console.error('telemetry.listByType error', err);
+    res.status(500).json({ ok:false, error:'server_error' });
+  }
+};
 
 exports.history = async (req, res) => {
   try {
