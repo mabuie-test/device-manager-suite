@@ -84,10 +84,12 @@
           <td style="padding:6px;border-bottom:1px solid #eee">${p.amount || ''} ${p.currency || ''}</td>
           <td style="padding:6px;border-bottom:1px solid #eee">${p.status}</td>
           <td style="padding:6px;border-bottom:1px solid #eee">${new Date(p.createdAt).toLocaleString()}</td>
-          <td style="padding:6px;border-bottom:1px solid #eee">
-            ${p.status === 'pending' ? `<button data-id="${p._id}" class="btnApprove">Aprovar</button><button data-id="${p._id}" class="btnReject">Rejeitar</button>` : '-'}
-            ${p.mediaFileId ? `<a href="/api/media/download/${p.mediaFileId}" target="_blank">Ver comprovativo</a>` : ''}
-          </td>
+          // dentro de res.payments.forEach(p => { ... })
+<td style="padding:6px;border-bottom:1px solid #eee">
+  ${p.status === 'pending' ? `<button data-id="${p._id}" class="btnApprove">Aprovar</button><button data-id="${p._id}" class="btnReject">Rejeitar</button>` : '-'}
+  ${p.mediaFileId ? `<button class="btnViewMedia" data-fileid="${p.mediaFileId}">Ver comprovativo</button>` : ''}
+</td>
+
         `;
         tbody.appendChild(tr);
       });
