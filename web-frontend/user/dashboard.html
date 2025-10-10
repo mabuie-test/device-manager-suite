@@ -88,12 +88,20 @@
         `;
         tbody.appendChild(tr);
       });
-      document.querySelectorAll('.btnView').forEach(b => {
-        b.addEventListener('click', () => {
-          const id = b.getAttribute('data-id');
-          window.location = '/user/device.html?deviceId=' + encodeURIComponent(id);
-        });
-      });
+// assume contexto: no admin -> leva para /admin/device.html, no user -> /user/device.html
+document.querySelectorAll('.btnView').forEach(b => {
+  b.addEventListener('click', () => {
+    const id = b.getAttribute('data-id');
+    // detecta se estamos no admin ou user pela URL atual
+    const path = window.location.pathname;
+    if (path.indexOf('/admin/') === 0 || path.indexOf('/admin') === 0) {
+      window.location = '/admin/device.html?deviceId=' + encodeURIComponent(id);
+    } else {
+      window.location = '/user/device.html?deviceId=' + encodeURIComponent(id);
+    }
+  });
+});
+
     }
 
     async function loadMyPayments() {
