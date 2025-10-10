@@ -2,8 +2,7 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const mongodb = require('mongodb');
-const mongoose = require('mongoose'); // se não estiver importado no topo, importa
-
+ 
 function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
 }
