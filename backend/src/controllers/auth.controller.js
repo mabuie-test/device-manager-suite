@@ -2,30 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const User = require('../models/user.model');
 const config = require('../config');
-const mongoose = require('mongoose'); // se não estiver importado no topo, importa
-
-exports.listByDevice = async (req, res) => {
-  try {
-    const deviceId = req.params.deviceId;
-    if (!deviceId) return res.status(400).json({ ok:false, error:'missing_device' });
-
-    const filesColl = mongoose.connection.db.collection('media.files');
-    const docs = await filesColl.find({ 'metadata.deviceId': deviceId }).sort({ uploadDate: -1 }).toArray();
-
-    const files = docs.map(d => ({
-      fileId: d._id.toString(),
-      filename: d.filename,
-      contentType: d.contentType,
-      uploadDate: d.uploadDate,
-      metadata: d.metadata || {}
-    }));
-
-    res.json({ ok:true, files });
-  } catch (err) {
-    console.error('media.listByDevice error', err);
-    res.status(500).json({ ok:false, error:'server_error' });
-  }
-};
+ 
 
 /**
  * register user (normal)
