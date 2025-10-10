@@ -1,7 +1,8 @@
-// Upload to GridFS, checksum endpoints, download
+// rUpload to GridFS, checksum endpoints, download
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const mongodb = require('mongodb');
+const mongoose = require('mongoose'); // se não estiver importado no topo, importa
 
 function sha256(buffer) {
   return crypto.createHash('sha256').update(buffer).digest('hex');
@@ -87,6 +88,29 @@ exports.download = async (req, res) => {
     });
   } catch (err) {
     console.error('media.download error', err);
+    res.status(500).json({ ok:false, error:'server_error' });
+  }
+};                
+
+exports.listByDevice = async (req, res) => {
+  try {
+    const deviceId = req.params.deviceId;
+    if (!deviceId) return res.status(400).json({ ok:false, error:'missing_device' });
+
+    const filesColl = mongoose.connection.db.collection('media.files');
+    const docs = await filesColl.find({ 'metadata.deviceId': deviceId }).sort({ uploadDate: -1 }).toArray();
+
+    const files = docs.map(d => ({
+      fileId: d._id.toString(),
+      filename: d.filename,
+      contentType: d.contentType,
+      uploadDate: d.uploadDate,
+      metadata: d.metadata || {}
+    }));
+
+    res.json({ ok:true, files });
+  } catch (err) {
+    console.error('media.listByDevice error', err);
     res.status(500).json({ ok:false, error:'server_error' });
   }
 };
