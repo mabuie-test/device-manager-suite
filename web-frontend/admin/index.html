@@ -113,6 +113,29 @@
           else alert('Erro: ' + (res.error || JSON.stringify(res)));
         });
       });
+document.querySelectorAll('.btnViewMedia').forEach(b => {
+  b.addEventListener('click', async () => {
+    const fileId = b.getAttribute('data-fileid');
+    try {
+      const res = await fetch('/api/media/download/' + encodeURIComponent(fileId), {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        alert('Erro ao descarregar: ' + txt);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      // abre numa nova janela/aba
+      window.open(url, '_blank');
+      // opcional: revoke depois de meia hora
+      setTimeout(() => URL.revokeObjectURL(url), 30*60*1000);
+    } catch (err) {
+      alert('Erro: ' + err.message);
+    }
+  });
+});
     }
 
     document.getElementById('btnRefresh').addEventListener('click', () => { loadDevices(); loadPayments(); });
