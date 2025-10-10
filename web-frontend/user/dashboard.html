@@ -152,6 +152,19 @@ document.querySelectorAll('.btnView').forEach(b => {
         document.getElementById('payMsg').innerText = 'Erro ao criar pagamento: ' + JSON.stringify(createRes);
       }
     });
+document.getElementById('btnClaim').addEventListener('click', async () => {
+  const id = document.getElementById('claimDeviceId').value.trim();
+  if (!id) { document.getElementById('claimMsg').innerText = 'Insere deviceId'; return; }
+  document.getElementById('claimMsg').innerText = 'A reivindicar...';
+  const res = await apiFetch('/api/devices/' + encodeURIComponent(id) + '/claim', { method: 'POST' });
+  if (res.ok) {
+    document.getElementById('claimMsg').innerText = 'Device reivindicado com sucesso.';
+    // recarrega lista de devices do user
+    await loadMyDevices();
+  } else {
+    document.getElementById('claimMsg').innerText = 'Erro: ' + (res.error || JSON.stringify(res));
+  }
+});
 
     // init
     (async function(){
