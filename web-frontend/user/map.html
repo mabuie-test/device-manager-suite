@@ -1,22 +1,26 @@
- <!doctype html>
+<!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Mapa do Dispositivo</title>
+  <title>Mapa do Dispositivo — Trail</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    #map { height:480px; border-radius:8px; box-shadow: 0 6px 18px rgba(11,22,39,0.06); }
+    /* layout */
+    #map { height:64vh; min-height:360px; border-radius:8px; box-shadow:0 6px 18px rgba(11,22,39,0.06); }
     .small { font-size:0.9rem; color:#6b7280; }
-    .loader { display:inline-block;border:3px solid #f3f3f3;border-radius:50%;border-top:3px solid #2563eb;width:14px;height:14px;animation:spin 1s linear infinite;margin-left:8px;vertical-align:middle; }
-    @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
     .list-item { padding:8px;border-bottom:1px solid #eee }
-    .list-item strong { display:block; margin-bottom:4px }
-    .controls { display:flex; gap:10px; align-items:center; margin-bottom:8px }
-    input#deviceId { padding:8px;border-radius:8px;border:1px solid #e6e9ef }
+    .controls { display:flex; gap:10px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+    input#deviceId { padding:8px;border-radius:8px;border:1px solid #e6e9ef; min-width:280px }
     button { padding:8px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff; cursor:pointer }
-    @media (max-width:600px){ #map{height:360px} .controls{flex-direction:column;align-items:stretch} button{width:100%} }
+    button.ghost { background:transparent;color:#2563eb;border:1px solid #e6e9ef }
+    .row { display:flex; gap:8px }
+    @media (max-width:600px) { .controls{flex-direction:column;align-items:stretch} button{width:100%} }
+    .legend { display:flex; gap:12px; align-items:center; margin-top:8px; font-size:0.9rem }
+    .legend .dot { width:14px;height:14px;border-radius:50%;display:inline-block }
+    .dot-old{ background:#1976d2 }
+    .dot-new{ background:#16a34a }
   </style>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -25,20 +29,26 @@
 <body>
   <div class="container">
     <header style="display:flex;justify-content:space-between;align-items:center;margin:12px 0">
-      <h1>Mapa</h1>
+      <h1>Mapa (Trail)</h1>
       <div>
         <a href="/user/dashboard.html">Voltar</a>
-        <button id="logout">Logout</button>
+        <button id="logout" style="margin-left:8px">Logout</button>
       </div>
     </header>
 
     <div class="card">
       <div class="controls">
-        <label style="flex:1">DeviceId: <input id="deviceId" placeholder="Cole o deviceId" /></label>
-        <div style="display:flex;gap:8px">
+        <label style="flex:1">DeviceId: <input id="deviceId" placeholder="Cole o deviceId aqui" /></label>
+        <div style="display:flex;gap:8px;align-items:center">
           <button id="btnLoad">Carregar</button>
-          <span id="status" class="small"></span>
+          <button id="btnClear" class="ghost">Limpar</button>
+          <button id="btnToggleTrail" class="ghost">Ocultar trail</button>
         </div>
+      </div>
+      <div class="legend">
+        <div><span class="dot dot-old"></span> Posição histórica</div>
+        <div><span class="dot dot-new"></span> Última posição</div>
+        <div style="margin-left:auto" id="status" class="small">Pronto</div>
       </div>
     </div>
 
@@ -46,160 +56,232 @@
 
     <div class="card">
       <h3>Últimos pontos</h3>
-      <ul id="list" style="list-style:none;padding-left:0;margin:0"></ul>
+      <ul id="list" style="list-style:none;padding-left:0;margin:0;max-height:280px;overflow:auto"></ul>
     </div>
   </div>
 
   <script src="/js/api.js"></script>
   <script>
-    // redirect to login if not authed
+    // -- helpers
+    function safeParseFloat(v) {
+      if (v === null || v === undefined) return NaN;
+      if (typeof v === 'number') return v;
+      if (typeof v === 'string') {
+        const n = parseFloat(v.replace(',', '.'));
+        return isFinite(n) ? n : NaN;
+      }
+      return NaN;
+    }
+
+    function formatTime(ts) {
+      try { return new Date(ts).toLocaleString(); } catch (e) { return String(ts); }
+    }
+
+    // redirect if not logged
     const token = localStorage.getItem('auth_token');
     if (!token) location.href = '/';
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
 
-    document.getElementById('logout').addEventListener('click', () => { localStorage.clear(); location.href = '/'; });
-
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('deviceId')) document.getElementById('deviceId').value = params.get('deviceId');
-
-    // leaflet map state
+    // initialize map variables
     let map = null;
-    let markers = []; // array of L.marker
+    let markers = [];           // all markers except lastHighlighted
+    let lastMarker = null;      // highlighted last position marker
+    let polyline = null;        // L.polyline for trail
+    let trailLatLngs = [];      // array of [lat, lon]
+    let trailVisible = true;
+    let socket = null;
+    let currentRoomDevice = null;
+
     function ensureMap() {
       if (!map) {
         map = L.map('map').setView([0,0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
       }
     }
-    function clearMarkers() {
+
+    function clearAll() {
+      if (!map) ensureMap();
       markers.forEach(m => map.removeLayer(m));
       markers = [];
+      if (lastMarker) { map.removeLayer(lastMarker); lastMarker = null; }
+      if (polyline) { map.removeLayer(polyline); polyline = null; }
+      trailLatLngs = [];
+      document.getElementById('list').innerHTML = '';
     }
-    function addMarker(lat, lon, accuracy, ts) {
-      const latN = parseFloat(lat);
-      const lonN = parseFloat(lon);
+
+    function addHistoricMarker(lat, lon, accuracy, ts) {
+      const latN = safeParseFloat(lat), lonN = safeParseFloat(lon);
       if (!isFinite(latN) || !isFinite(lonN)) return null;
-      const timeStr = new Date(ts || Date.now()).toLocaleString();
-      const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${latN},${lonN}`;
-      const popupHtml = `<div style="min-width:190px"><div><strong>${timeStr}</strong></div><div>Accuracy: ${accuracy||'-'}</div><div style="margin-top:8px"><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div></div>`;
-      const m = L.marker([latN, lonN]).addTo(map);
-      m.bindPopup(popupHtml);
+      const m = L.circleMarker([latN, lonN], { radius:6, color:'#1976d2', fillColor:'#1976d2', fillOpacity:0.9 }).addTo(map);
+      const popup = `<div style="min-width:160px"><div><strong>${formatTime(ts)}</strong></div><div>Accuracy: ${accuracy||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${latN},${lonN}" target="_blank">Abrir no Google Maps</a></div></div>`;
+      m.bindPopup(popup);
       markers.push(m);
       return m;
     }
 
-    // render list item (prepend if newest)
-    function renderListPrepend(lat, lon, accuracy, ts) {
+    function setLastMarker(lat, lon, accuracy, ts) {
+      const latN = safeParseFloat(lat), lonN = safeParseFloat(lon);
+      if (!isFinite(latN) || !isFinite(lonN)) return;
+      if (lastMarker) { map.removeLayer(lastMarker); lastMarker = null; }
+      lastMarker = L.circleMarker([latN, lonN], { radius:9, color:'#0ea537', fillColor:'#0ea537', fillOpacity:0.95 }).addTo(map);
+      const popup = `<div style="min-width:180px"><div><strong>${formatTime(ts)}</strong></div><div>Accuracy: ${accuracy||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${latN},${lonN}" target="_blank">Abrir no Google Maps</a></div></div>`;
+      lastMarker.bindPopup(popup);
+      try { lastMarker.openPopup(); } catch (e) {}
+      // pan to it gently
+      try { map.panTo([latN, lonN]); } catch (e) {}
+    }
+
+    function updatePolyline() {
+      if (!map) return;
+      if (polyline) map.removeLayer(polyline);
+      if (!trailVisible || trailLatLngs.length < 2) { polyline = null; return; }
+      polyline = L.polyline(trailLatLngs, { color: '#2563eb', weight: 4, opacity: 0.85 }).addTo(map);
+    }
+
+    function prependList(lat, lon, accuracy, ts) {
       const ul = document.getElementById('list');
-      const timeStr = new Date(ts || Date.now()).toLocaleString();
-      const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
       const li = document.createElement('li');
       li.className = 'list-item';
-      li.innerHTML = `<strong>${timeStr}</strong>
-        <div>Lat: ${parseFloat(lat).toFixed(6)} &nbsp; Lon: ${parseFloat(lon).toFixed(6)}</div>
-        <div>Accuracy: ${accuracy||'-'}</div>
-        <div style="margin-top:6px"><a href="${gmapUrl}" target="_blank">Abrir no Google Maps</a></div>`;
+      li.innerHTML = `<strong>${formatTime(ts)}</strong><div>Lat: ${parseFloat(lat).toFixed(6)} Lon: ${parseFloat(lon).toFixed(6)}</div><div>Accuracy: ${accuracy||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">Abrir no Google Maps</a></div>`;
       ul.insertBefore(li, ul.firstChild);
     }
 
-    // load history and init realtime
-    async function load() {
-      const deviceId = document.getElementById('deviceId').value.trim();
-      const statusEl = document.getElementById('status');
-      if (!deviceId) return alert('DeviceId required');
-
-      statusEl.innerHTML = 'Carregando <span class="loader"></span>';
-      ensureMap();
-      clearMarkers();
-      document.getElementById('list').innerHTML = '';
-
+    // load historical telemetry and draw trail
+    async function loadHistory(deviceId) {
+      document.getElementById('status').innerText = 'Carregando...';
       try {
         const r = await apiFetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/items?type=telemetry', { method: 'GET' });
         if (!r.ok) {
-          statusEl.innerText = 'Erro a carregar histórico';
-          document.getElementById('list').innerHTML = '<li class="list-item">Erro: ' + (r.error || JSON.stringify(r)) + '</li>';
-          return;
+          document.getElementById('status').innerText = 'Erro ao carregar histórico';
+          console.error('history error', r);
+          return [];
         }
         const items = r.items || [];
-        // sort ascending by ts so fitBounds natural path (older -> newer)
-        items.sort((a,b) => {
-          const at = a.ts || (a.payload && a.payload.ts) || 0;
-          const bt = b.ts || (b.payload && b.payload.ts) || 0;
-          return (at - bt);
-        });
-
-        const bounds = [];
-        items.forEach(it => {
+        // Normalize: each entry -> {lat,lon,accuracy,ts}
+        const points = items.map(it => {
           const payload = it.payload || it;
           const loc = payload.location || {};
-          const lat = parseFloat(loc.lat);
-          const lon = parseFloat(loc.lon);
-          const acc = loc.accuracy;
+          const lat = safeParseFloat(loc.lat);
+          const lon = safeParseFloat(loc.lon);
+          const acc = loc.accuracy || payload.accuracy || loc.accuracy;
           const ts = payload.ts || it.ts || Date.now();
-          if (isFinite(lat) && isFinite(lon)) {
-            addMarker(lat, lon, acc, ts);
-            bounds.push([lat, lon]);
-            // append to list in chronological order; we'll invert view by scrolling later
-            const ul = document.getElementById('list');
-            const li = document.createElement('li');
-            li.className = 'list-item';
-            li.innerHTML = `<strong>${new Date(ts).toLocaleString()}</strong><div>Lat: ${lat.toFixed(6)} Lon: ${lon.toFixed(6)}</div><div>Accuracy: ${acc||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank">Abrir no Google Maps</a></div>`;
-            ul.appendChild(li);
-          }
-        });
-
-        if (bounds.length > 0) {
-          try {
-            map.fitBounds(bounds, { padding: [40,40], maxZoom: 16 });
-          } catch (e) { map.setView(bounds[bounds.length-1], 13); }
-        } else {
-          map.setView([0,0], 2);
-        }
-
-        // realtime socket
-        const socket = io();
-        socket.emit('join_device_room', deviceId);
-        // handle incoming telemetry events
-        socket.off('telemetry'); // remove previous handlers
-        socket.on('telemetry', data => {
-          try {
-            // data: { type: "telemetry", payload: { location: {lat,lon,accuracy}, ts } }
-            const payload = data.payload || {};
-            const loc = payload.location || {};
-            const lat = parseFloat(loc.lat);
-            const lon = parseFloat(loc.lon);
-            const acc = loc.accuracy;
-            const ts = payload.ts || data.ts || Date.now();
-            if (isFinite(lat) && isFinite(lon)) {
-              ensureMap();
-              const m = addMarker(lat, lon, acc, ts);
-              if (m) {
-                m.openPopup();
-                // keep map centered-ish on newest
-                try { map.panTo([lat, lon]); } catch (e) {}
-                // prepend to list
-                renderListPrepend(lat, lon, acc, ts);
-              }
-            }
-          } catch (e) {
-            console.error('socket telemetry err', e);
-          }
-        });
-
-        statusEl.innerText = 'OK';
+          return { lat, lon, acc, ts };
+        }).filter(p => isFinite(p.lat) && isFinite(p.lon));
+        // sort ascending by ts
+        points.sort((a,b) => a.ts - b.ts);
+        document.getElementById('status').innerText = 'OK';
+        return points;
       } catch (err) {
-        console.error(err);
-        statusEl.innerText = 'Erro na comunicação';
-        document.getElementById('list').innerHTML = '<li class="list-item">Erro: ' + err.message + '</li>';
+        document.getElementById('status').innerText = 'Erro na comunicação';
+        console.error('loadHistory err', err);
+        return [];
       }
     }
 
-    document.getElementById('btnLoad').addEventListener('click', load);
+    // main load action
+    async function load() {
+      const deviceId = document.getElementById('deviceId').value.trim();
+      if (!deviceId) return alert('DeviceId required');
+      ensureMap();
+      clearAll();
 
-    // auto-load if deviceId provided in query
-    if (document.getElementById('deviceId').value) load();
+      // join socket room (we'll join after successful load)
+      // load history
+      const pts = await loadHistory(deviceId);
+      if (pts.length === 0) {
+        map.setView([0,0], 2);
+      } else {
+        // draw markers and build trailLatLngs
+        pts.forEach(pt => {
+          trailLatLngs.push([pt.lat, pt.lon]);
+          addHistoricMarker(pt.lat, pt.lon, pt.acc, pt.ts);
+        });
+        // last one highlight
+        const last = pts[pts.length - 1];
+        setLastMarker(last.lat, last.lon, last.acc, last.ts);
+        // draw polyline
+        updatePolyline();
+        // fit bounds
+        try {
+          map.fitBounds(trailLatLngs, { padding:[40,40], maxZoom:16 });
+        } catch (e) {
+          map.setView([last.lat, last.lon], 13);
+        }
+        // populate list (chronological order)
+        const ul = document.getElementById('list');
+        ul.innerHTML = '';
+        for (let i = pts.length - 1; i >= 0; i--) { // newest first
+          const p = pts[i];
+          const li = document.createElement('li');
+          li.className = 'list-item';
+          li.innerHTML = `<strong>${formatTime(p.ts)}</strong><div>Lat: ${p.lat.toFixed(6)} Lon: ${p.lon.toFixed(6)}</div><div>Accuracy: ${p.acc||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}" target="_blank">Abrir no Google Maps</a></div>`;
+          ul.appendChild(li);
+        }
+      }
+
+      // setup socket: join device room and listen
+      try {
+        if (socket && currentRoomDevice) {
+          // leave previous room if any (server might not support rooms leave via socket client; safer to disconnect and reconnect)
+          try { socket.emit('leave_device_room', currentRoomDevice); } catch (e) {}
+          try { socket.disconnect(); } catch(e) {}
+          socket = null;
+        }
+        // connect to same origin
+        socket = io(window.location.origin, { transports:['websocket', 'polling'] });
+        currentRoomDevice = deviceId;
+        socket.on('connect', () => {
+          console.log('socket connected', socket.id);
+          socket.emit('join_device_room', deviceId);
+        });
+        socket.on('telemetry', data => {
+          try {
+            // Accept multiple formats
+            const payload = data.payload || data;
+            const loc = payload.location || {};
+            const lat = safeParseFloat(loc.lat);
+            const lon = safeParseFloat(loc.lon);
+            const acc = loc.accuracy || payload.accuracy;
+            const ts = payload.ts || data.ts || Date.now();
+            if (!isFinite(lat) || !isFinite(lon)) return;
+            // append to trail arrays (keep chronological)
+            trailLatLngs.push([lat, lon]);
+            // add historic marker for this new point (we will keep old markers as history)
+            addHistoricMarker(lat, lon, acc, ts);
+            // update last marker highlight
+            setLastMarker(lat, lon, acc, ts);
+            // update polyline
+            updatePolyline();
+            // prepend to list
+            prependList(lat, lon, acc, ts);
+            // optional: auto-zoom on newest (commentable)
+            try { map.panTo([lat, lon]); } catch(e){}
+          } catch (e) { console.error('socket telemetry err', e); }
+        });
+        socket.on('disconnect', () => console.log('socket disconnected'));
+      } catch (e) {
+        console.error('socket setup err', e);
+      }
+    }
+
+    // UI bindings
+    document.getElementById('btnLoad').addEventListener('click', load);
+    document.getElementById('btnClear').addEventListener('click', () => {
+      clearAll();
+      document.getElementById('status').innerText = 'Limpo';
+    });
+    document.getElementById('btnToggleTrail').addEventListener('click', (ev) => {
+      trailVisible = !trailVisible;
+      document.getElementById('btnToggleTrail').innerText = trailVisible ? 'Ocultar trail' : 'Mostrar trail';
+      updatePolyline();
+    });
+
+    // If deviceId in query, auto load
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('deviceId')) {
+      document.getElementById('deviceId').value = params.get('deviceId');
+      setTimeout(() => load(), 250);
+    }
   </script>
 </body>
 </html>
