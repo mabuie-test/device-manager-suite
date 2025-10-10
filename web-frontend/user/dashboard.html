@@ -17,7 +17,13 @@
       </div>
 
       <div class="card">
-        <h3>Devices</h3>
+        <h3>Devices</h3> <div class="card" style="margin-bottom:12px">
+  <h3>Reivindicar dispositivo</h3>
+  <label>DeviceId: <input id="claimDeviceId" placeholder="Cole o DeviceId aqui" /></label>
+  <button id="btnClaim">Reivindicar</button>
+  <p id="claimMsg" class="small"></p>
+</div>
+
         <table id="myDevices" style="width:100%;border-collapse:collapse">
           <thead><tr><th>DeviceId</th><th>Name</th><th>Last Seen</th><th>Ações</th></tr></thead>
           <tbody></tbody>
