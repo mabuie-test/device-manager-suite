@@ -4,8 +4,6 @@ const router = express.Router();
 const ctrl = require('../controllers/media.controller');
 const auth = require('../middleware/auth.middleware');
 // after existing routes
-const ctrl = require('../controllers/media.controller');
-const auth = require('../middleware/auth.middleware');
 
 // u 9k.se memory storage to compute checksum easily
 const storage = multer.memoryStorage();
