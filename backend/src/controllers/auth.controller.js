@@ -45,16 +45,25 @@ exports.login = async (req, res) => {
 /**
  * me - returns payload from middleware
  */
+// topo do ficheiro (assegura que existe)
+
+// substitui exports.me por:
 exports.me = async (req, res) => {
   try {
-    const user = req.user;
-    if (!user) return res.status(401).json({ ok:false, error:'no_auth' });
+    const payload = req.user;
+    if (!payload || !payload.id) return res.status(401).json({ ok:false, error:'no_auth' });
+
+    // busca o utilizador no BD para incluir campo active, name, etc.
+    const user = await User.findById(payload.id).select('-passwordHash').lean();
+    if (!user) return res.status(404).json({ ok:false, error:'not_found' });
+
     res.json({ ok: true, user });
   } catch (err) {
     console.error('me error', err);
     res.status(500).json({ ok:false, error:'server_error' });
   }
 };
+
 
 /**
  * registerAdmin - create admin account securely
