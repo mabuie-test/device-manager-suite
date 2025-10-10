@@ -1,4 +1,4 @@
-const express = require('express');
+ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/devices.controller');
 const auth = require('../middleware/auth.middleware');
@@ -11,6 +11,9 @@ router.get('/', ctrl.list);
 
 // devices owned by current authenticated user
 router.get('/my', auth.requireAuth, ctrl.listMy);
+
+// claim device (authenticated user)
+router.post('/:deviceId/claim', auth.requireAuth, ctrl.claim);
 
 // get single device by id
 router.get('/:deviceId', auth.adminOrOwner, ctrl.get);
