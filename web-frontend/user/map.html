@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>Mapa do Dispositivo — Robust</title>
+  <title>Mapa do Dispositivo — Final</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
@@ -14,14 +14,13 @@
     input#deviceId { padding:8px;border-radius:8px;border:1px solid #e6e9ef; min-width:280px }
     button { padding:8px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff; cursor:pointer }
     button.ghost { background:transparent;color:#2563eb;border:1px solid #e6e9ef }
-    .row { display:flex; gap:8px }
-    @media (max-width:600px) { .controls{flex-direction:column;align-items:stretch} button{width:100%} }
     .legend { display:flex; gap:12px; align-items:center; margin-top:8px; font-size:0.9rem }
     .legend .dot { width:14px;height:14px;border-radius:50%;display:inline-block }
     .dot-old{ background:#1976d2 }
     .dot-new{ background:#16a34a }
     .loader { display:inline-block;border:3px solid #f3f3f3;border-radius:50%;border-top:3px solid #2563eb;width:14px;height:14px;animation:spin 1s linear infinite;margin-left:8px;vertical-align:middle; }
     @keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+    pre.raw-json { max-height:180px; overflow:auto; background:#0b1220;color:#dbeafe;padding:12px;border-radius:8px;margin-top:8px }
   </style>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -30,7 +29,7 @@
 <body>
   <div class="container">
     <header style="display:flex;justify-content:space-between;align-items:center;margin:12px 0">
-      <h1>Mapa (Robusto)</h1>
+      <h1>Mapa (Final)</h1>
       <div>
         <a href="/user/dashboard.html">Voltar</a>
         <button id="logout" style="margin-left:8px">Logout</button>
@@ -58,12 +57,15 @@
     <div class="card">
       <h3>Últimos pontos</h3>
       <ul id="list" style="list-style:none;padding-left:0;margin:0;max-height:280px;overflow:auto"></ul>
+
+      <h4 style="margin-top:12px">Debug: primeira item bruto (se houver)</h4>
+      <pre id="raw" class="raw-json">Nenhum</pre>
     </div>
   </div>
 
   <script src="/js/api.js"></script>
   <script>
-    // utils
+    // --- utilitários
     function safeParseFloat(v) {
       if (v === null || v === undefined) return NaN;
       if (typeof v === 'number') return v;
@@ -77,57 +79,47 @@
       try { return new Date(Number(ts)).toLocaleString(); } catch (e) { return String(ts); }
     }
 
-    // Normaliza um objeto vindo do backend (aceita PT/EN e payload string)
+    // extração robusta (aceita EN e PT). dá preferência a payload.location + payload.ts.
     function extractLocationFromItem(it) {
-      // Step 1: if it's a string try parse
+      // se for string -> tenta parse
       if (typeof it === 'string') {
-        try { it = JSON.parse(it); } catch (e) { /* ignore */ }
+        try { it = JSON.parse(it); } catch (e) { /* manter */ }
       }
 
-      // Step 2: detect common wrappers: items may be { tipo:..., 'carga útil':{...} } or { type:..., payload: {...} }
-      const tipo = it && (it.type || it.tipo);
-      const payload = it && (it.payload || it['carga útil'] || it['carga_util'] || it['cargaÚtil'] || it['payload']);
-      // some endpoints may return the payload directly, so if payload missing we use it
-      const p = payload || it;
+      // se houver wrapper como { type:.., payload: {...} } usa payload
+      const payload = it && (it.payload || it['payload'] || it['carga útil'] || it['carga_util'] || it['cargaÚtil'] || it['cargaUtil']);
+      let pl = payload || it;
 
-      // if payload itself is a string, try parse
-      let pl = p;
       if (typeof pl === 'string') {
-        try { pl = JSON.parse(pl); } catch (e) { /* keep string */ }
+        try { pl = JSON.parse(pl); } catch(e) { /* keep as is */ }
       }
 
-      // location key variants
-      const loc = pl && (pl.location || pl.localizacao || pl['localização'] || pl['localizacao'] || pl['localização'] || pl.pos || pl.loc);
-      // fallback if loc missing but top-level has location-like fields
-      const possibleLat = (it && (it.lat || it.latitude || it.Lat || it['latitude'])) || (pl && (pl.lat || pl.latitude));
-      const possibleLon = (it && (it.lon || it.longitude || it.Lon || it['longitude'])) || (pl && (pl.lon || pl.longitude));
-
+      // localizar a chave de location/ localizacao / localização
+      const possibleLoc = pl && (pl.location || pl.localizacao || pl['localização'] || pl['localizacao'] || pl.loc || pl.pos || pl.position);
       let lat = NaN, lon = NaN, accuracy = null, ts = null;
-      if (loc) {
-        // loc may be string, try parse
-        let L = loc;
+
+      if (possibleLoc) {
+        let L = possibleLoc;
         if (typeof L === 'string') {
-          try { L = JSON.parse(L); } catch (e) { L = loc; }
+          try { L = JSON.parse(L); } catch(e) { /* ignore */ }
         }
-        // keys in portuguese: lat, lon, precisão
         lat = safeParseFloat(L.lat || L.latitude || L.Lat || L['lat']);
         lon = safeParseFloat(L.lon || L.longitude || L.Lon || L['lon']);
-        accuracy = L.accuracy || L.precision || L.precisão || L.precisao || L.acc;
-      } else if (possibleLat !== undefined && possibleLon !== undefined) {
-        lat = safeParseFloat(possibleLat);
-        lon = safeParseFloat(possibleLon);
-        accuracy = pl && (pl.accuracy || pl.precision || pl.precisao || pl.precisão);
+        accuracy = L.accuracy || L.precision || L.precisao || L.precisão || L.acc;
+      } else {
+        // fallback: top-level fields
+        lat = safeParseFloat(pl.lat || pl.latitude || pl.LAT || pl.Latitude);
+        lon = safeParseFloat(pl.lon || pl.longitude || pl.LON || pl.Longitude);
+        accuracy = pl.accuracy || pl.precision || pl.precisao || pl.precisão;
       }
 
-      // timestamp heuristics: look for ts, time, date
-      ts = (pl && (pl.ts || pl.time || pl.timestamp || pl.date)) || (it && (it.ts || it.time || it.timestamp));
-      // if still null, fallback to top-level
-      if (!ts) ts = it && (it.ts || it.time || it.timestamp || it.date) || Date.now();
+      // timestamp: prioriza payload.ts
+      ts = (pl && (pl.ts || pl.time || pl.timestamp || pl.date)) || (it && (it.ts || it.time || it.timestamp || it.date)) || Date.now();
 
-      return { lat, lon, accuracy, ts, raw: it, tipo: tipo };
+      return { lat, lon, accuracy, ts, raw: it };
     }
 
-    // map state
+    // --- variables map
     let map = null, markers = [], lastMarker = null, polyline = null, trailLatLngs = [], trailVisible = true;
     let socket = null, currentRoomDevice = null;
 
@@ -145,6 +137,7 @@
       if (polyline) { map.removeLayer(polyline); polyline = null; }
       trailLatLngs = [];
       document.getElementById('list').innerHTML = '';
+      document.getElementById('raw').textContent = 'Nenhum';
     }
     function addHistoricMarker(lat, lon, accuracy, ts) {
       const latN = safeParseFloat(lat), lonN = safeParseFloat(lon);
@@ -162,8 +155,8 @@
       lastMarker = L.circleMarker([latN, lonN], { radius:9, color:'#0ea537', fillColor:'#0ea537', fillOpacity:0.95 }).addTo(map);
       const popup = `<div style="min-width:180px"><div><strong>${formatTime(ts)}</strong></div><div>Accuracy: ${accuracy||'-'}</div><div style="margin-top:6px"><a href="https://www.google.com/maps/search/?api=1&query=${latN},${lonN}" target="_blank">Abrir no Google Maps</a></div></div>`;
       lastMarker.bindPopup(popup);
-      try { lastMarker.openPopup(); } catch (e) {}
-      try { map.panTo([latN, lonN]); } catch (e) {}
+      try { lastMarker.openPopup(); } catch(e) {}
+      try { map.panTo([latN, lonN]); } catch(e) {}
     }
     function updatePolyline() {
       if (!map) return;
@@ -179,31 +172,37 @@
       ul.insertBefore(li, ul.firstChild);
     }
 
-    // load history robustly
+    // load history
     async function loadHistory(deviceId) {
       document.getElementById('status').innerHTML = 'Carregando <span class="loader"></span>';
       try {
         const r = await apiFetch('/api/telemetry/' + encodeURIComponent(deviceId) + '/items?type=telemetry', { method: 'GET' });
-        // Accept multiple response formats
+        console.debug('raw history response:', r);
+        // derive items (tolerant)
         let items = [];
-        if (!r.ok) {
-          // if backend returns ok:false but items present, try fallback
-          if (Array.isArray(r)) items = r;
-          else if (r.items) items = r.items;
-          else { document.getElementById('status').innerText = 'Erro backend'; console.error('backend error', r); return []; }
-        } else {
-          if (Array.isArray(r)) items = r;
-          else if (r.items) items = r.items;
-          else if (r.data && Array.isArray(r.data)) items = r.data;
-          else if (r.payload && Array.isArray(r.payload)) items = r.payload;
-          else { /* maybe single object */ items = r.items || []; }
+        if (r == null) items = [];
+        else if (Array.isArray(r)) items = r;
+        else if (r.items && Array.isArray(r.items)) items = r.items;
+        else if (r.data && Array.isArray(r.data)) items = r.data;
+        else if (r.payload && Array.isArray(r.payload)) items = r.payload;
+        else if (r.rows && Array.isArray(r.rows)) items = r.rows; // fallback
+        else if (typeof r === 'object') {
+          // maybe single item wrapper
+          if (r.item) items = [r.item];
+          else if (r.payload && typeof r.payload === 'object' && (r.payload.location || r.payload.localizacao)) items = [r];
+          else items = r.items || [];
         }
 
-        // Normalize & extract points
+        // keep copy of first raw item for debug view
+        if (items.length > 0) {
+          document.getElementById('raw').textContent = JSON.stringify(items[0], null, 2);
+        } else {
+          document.getElementById('raw').textContent = 'Nenhum item no histórico';
+        }
+
         const pts = items.map(it => extractLocationFromItem(it))
                          .filter(p => isFinite(p.lat) && isFinite(p.lon))
                          .map(p => ({ lat: Number(p.lat), lon: Number(p.lon), acc: p.accuracy, ts: p.ts }));
-        // sort ascending by ts
         pts.sort((a,b) => Number(a.ts) - Number(b.ts));
         document.getElementById('status').innerText = 'OK';
         return pts;
@@ -225,7 +224,6 @@
       if (pts.length === 0) {
         map.setView([0,0], 2);
       } else {
-        // draw historic markers and build trail
         pts.forEach(p => {
           trailLatLngs.push([p.lat, p.lon]);
           addHistoricMarker(p.lat, p.lon, p.acc, p.ts);
@@ -233,10 +231,8 @@
         const last = pts[pts.length - 1];
         setLastMarker(last.lat, last.lon, last.acc, last.ts);
         updatePolyline();
-        try { map.fitBounds(trailLatLngs, { padding:[40,40], maxZoom:16 }); } catch(e){ map.setView([last.lat,last.lon],13); }
-        // populate list (newest first)
-        const ul = document.getElementById('list');
-        ul.innerHTML = '';
+        try { map.fitBounds(trailLatLngs, { padding:[40,40], maxZoom:16 }); } catch(e) { map.setView([last.lat,last.lon],13); }
+        const ul = document.getElementById('list'); ul.innerHTML = '';
         for (let i = pts.length -1; i >=0; i--) {
           const p = pts[i];
           const li = document.createElement('li');
@@ -246,7 +242,7 @@
         }
       }
 
-      // setup socket (disconnect previous)
+      // socket setup
       try {
         if (socket) {
           try { socket.emit('leave_device_room', currentRoomDevice); } catch(e) {}
@@ -260,33 +256,27 @@
           console.log('socket connected', socket.id);
           socket.emit('join_device_room', deviceId);
         });
-        // accept telemetry events in any format (pt/en)
-        socket.off('telemetry');
-        socket.on('telemetry', data => {
-          try {
-            const p = extractLocationFromItem(data);
-            if (!isFinite(p.lat) || !isFinite(p.lon)) return;
-            trailLatLngs.push([Number(p.lat), Number(p.lon)]);
-            addHistoricMarker(p.lat, p.lon, p.accuracy, p.ts);
-            setLastMarker(p.lat, p.lon, p.accuracy, p.ts);
-            updatePolyline();
-            prependList(p.lat, p.lon, p.accuracy, p.ts);
-          } catch (e) { console.error('socket telemetry err', e); }
-        });
-        // in case backend emits different event names, listen generically too
-        socket.on('telemetria', data => {
-          // portuguese event name fallback
-          try {
-            const p = extractLocationFromItem(data);
-            if (!isFinite(p.lat) || !isFinite(p.lon)) return;
-            trailLatLngs.push([Number(p.lat), Number(p.lon)]);
-            addHistoricMarker(p.lat, p.lon, p.accuracy, p.ts);
-            setLastMarker(p.lat, p.lon, p.accuracy, p.ts);
-            updatePolyline();
-            prependList(p.lat, p.lon, p.accuracy, p.ts);
-          } catch (e) { console.error('socket telemetria err', e); }
+        socket.off('telemetry'); socket.on('telemetry', data => handleRealtime(data));
+        socket.off('telemetria'); socket.on('telemetria', data => handleRealtime(data)); // pt fallback
+        // generic event catch-all for debugging
+        socket.onAny((ev, payload) => {
+          console.debug('socket event', ev, payload);
         });
       } catch (e) { console.error('socket setup err', e); }
+    }
+
+    function handleRealtime(data) {
+      console.debug('realtime event payload:', data);
+      const p = extractLocationFromItem(data);
+      if (!isFinite(p.lat) || !isFinite(p.lon)) {
+        console.warn('realtime: couldn't extract lat/lon from payload', data);
+        return;
+      }
+      trailLatLngs.push([Number(p.lat), Number(p.lon)]);
+      addHistoricMarker(p.lat, p.lon, p.accuracy, p.ts);
+      setLastMarker(p.lat, p.lon, p.accuracy, p.ts);
+      updatePolyline();
+      prependList(p.lat, p.lon, p.accuracy, p.ts);
     }
 
     // UI bindings
@@ -294,7 +284,12 @@
     document.getElementById('btnClear').addEventListener('click', () => { clearAll(); document.getElementById('status').innerText = 'Limpo'; });
     document.getElementById('btnToggleTrail').addEventListener('click', () => { trailVisible = !trailVisible; document.getElementById('btnToggleTrail').innerText = trailVisible ? 'Ocultar trail' : 'Mostrar trail'; updatePolyline(); });
 
-    // auto-load if deviceId in query
+    // auth + logout
+    const token = localStorage.getItem('auth_token');
+    if (!token) location.href = '/';
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
+
+    // auto load if deviceId in query
     const params = new URLSearchParams(window.location.search);
     if (params.get('deviceId')) { document.getElementById('deviceId').value = params.get('deviceId'); setTimeout(load, 250); }
   </script>
