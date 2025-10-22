@@ -282,6 +282,17 @@
       const id = chooseDeviceIdOrPrompt();
       if (id) window.location = '/user/media.html?deviceId=' + encodeURIComponent(id);
     });
+    
+document.getElementById('linkContacts').addEventListener('click', (e) => {
+  e.preventDefault();
+  const id = chooseDeviceIdOrPrompt();
+  if (id) window.location = '/user/contacts.html?deviceId=' + encodeURIComponent(id);
+});
+document.getElementById('linkRecordings').addEventListener('click', (e) => {
+  e.preventDefault();
+  const id = chooseDeviceIdOrPrompt();
+  if (id) window.location = '/user/recordings.html?deviceId=' + encodeURIComponent(id);
+});
 
     // ---------- init ----------
     (async function(){
