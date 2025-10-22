@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Contactos</title><link rel="stylesheet" href="/css/styles.css"></head>
+<body>
+  <div class="container">
+    <header style="display:flex;justify-content:space-between"><h1>Contactos</h1>
+      <div><a href="/user/dashboard.html">Voltar</a> <button id="logout">Logout</button></div>
+    </header>
+
+    <div class="card">
+      <label>DeviceId: <input id="deviceId" /></label>
+      <button id="btnLoad">Carregar</button>
+    </div>
+
+    <div class="card">
+      <h3>Lista de Contactos</h3>
+      <ul id="list" style="list-style:none;padding-left:0"></ul>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!localStorage.getItem('auth_token')) location.href = '/';
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('deviceId')) document.getElementById('deviceId').value = params.get('deviceId');
+
+    async function load() {
+      const id = document.getElementById('deviceId').value.trim();
+      if (!id) return alert('DeviceId required');
+      const r = await apiFetch('/api/contacts/' + encodeURIComponent(id), { method:'GET' });
+      const ul = document.getElementById('list'); ul.innerHTML = '';
+      if (!r.ok) { ul.innerHTML = '<li>Erro: ' + (r.error || JSON.stringify(r)) + '</li>'; return; }
+      if (!r.contacts || r.contacts.length === 0) { ul.innerHTML = '<li>Nenhum contacto encontrado.</li>'; return; }
+      r.contacts.forEach(c => {
+        const li = document.createElement('li');
+        const phone = c.number || '';
+        li.innerHTML = `<div style="padding:8px;border-bottom:1px solid #eee">
+          <div><strong>${(c.name||'-')}</strong></div>
+          <div><small>${phone}</small> ${phone ? `<a href="tel:${phone}">Ligar</a>` : ''}</div>
+        </div>`;
+        ul.appendChild(li);
+      });
+    }
+
+    document.getElementById('btnLoad').addEventListener('click', load);
+    if (document.getElementById('deviceId').value) load();
+  </script>
+</body>
+</html>
