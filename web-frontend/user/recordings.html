@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Gravações de Chamadas</title><link rel="stylesheet" href="/css/styles.css"></head>
+<body>
+  <div class="container">
+    <header style="display:flex;justify-content:space-between"><h1>Gravações</h1>
+      <div><a href="/user/dashboard.html">Voltar</a> <button id="logout">Logout</button></div>
+    </header>
+
+    <div class="card">
+      <label>DeviceId: <input id="deviceId" /></label>
+      <button id="btnLoad">Carregar</button>
+    </div>
+
+    <div class="card">
+      <h3>Lista de Gravações</h3>
+      <ul id="list" style="list-style:none;padding-left:0"></ul>
+    </div>
+  </div>
+
+  <script src="/js/api.js"></script>
+  <script>
+    if (!localStorage.getItem('auth_token')) location.href = '/';
+    const token = localStorage.getItem('auth_token');
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.clear(); location.href='/' });
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('deviceId')) document.getElementById('deviceId').value = params.get('deviceId');
+
+    async function loadRecordings() {
+      const id = document.getElementById('deviceId').value.trim();
+      if (!id) return alert('DeviceId required');
+      const r = await apiFetch('/api/recordings/' + encodeURIComponent(id), { method:'GET' });
+      const ul = document.getElementById('list'); ul.innerHTML = '';
+      if (!r.ok) { ul.innerHTML = '<li>Erro: ' + (r.error || JSON.stringify(r)) + '</li>'; return; }
+      if (!r.recordings || r.recordings.length === 0) { ul.innerHTML = '<li>Nenhuma gravação encontrada.</li>'; return; }
+
+      for (const rec of r.recordings) {
+        const li = document.createElement('li');
+        li.style.padding = '8px'; li.style.borderBottom = '1px solid #eee';
+        const ts = rec.uploadDate ? new Date(rec.uploadDate).toLocaleString() : '';
+        const label = `${rec.filename || rec.originalname || '-'} (${ts})`;
+        // create play button
+        const btnPlay = document.createElement('button');
+        btnPlay.textContent = 'Play';
+        btnPlay.style.marginRight = '8px';
+        btnPlay.addEventListener('click', async () => {
+          try {
+            btnPlay.disabled = true;
+            btnPlay.textContent = 'Loading...';
+            const resp = await fetch(rec.downloadUrl, { headers: { 'Authorization': 'Bearer ' + token }});
+            if (!resp.ok) throw new Error('download failed: ' + resp.status);
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            // create or reuse audio element
+            let audio = li.querySelector('audio');
+            if (!audio) {
+              audio = document.createElement('audio');
+              audio.controls = true;
+              audio.style.display = 'block';
+              audio.style.marginTop = '8px';
+              li.appendChild(audio);
+            }
+            audio.src = url;
+            audio.play().catch(()=>{});
+            // revoke after 30min
+            setTimeout(() => URL.revokeObjectURL(url), 30*60*1000);
+          } catch (err) {
+            alert('Erro: ' + (err.message || err));
+          } finally {
+            btnPlay.disabled = false;
+            btnPlay.textContent = 'Play';
+          }
+        });
+
+        const btnDownload = document.createElement('button');
+        btnDownload.textContent = 'Download';
+        btnDownload.style.marginLeft = '8px';
+        btnDownload.addEventListener('click', async () => {
+          try {
+            const resp = await fetch(rec.downloadUrl, { headers: { 'Authorization': 'Bearer ' + token }});
+            if (!resp.ok) throw new Error('download failed: ' + resp.status);
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = rec.filename || (rec.originalname || 'recording');
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(()=> URL.revokeObjectURL(url), 30*60*1000);
+          } catch (err) {
+            alert('Erro: ' + (err.message || err));
+          }
+        });
+
+        li.innerHTML = `<strong>${label}</strong><div style="font-size:0.9rem;color:#666">${rec.contentType || ''} • ${rec.size ? (rec.size + ' bytes') : ''}</div>`;
+        li.appendChild(document.createElement('div'));
+        li.appendChild(btnPlay);
+        li.appendChild(btnDownload);
+        ul.appendChild(li);
+      }
+    }
+
+    document.getElementById('btnLoad').addEventListener('click', loadRecordings);
+    if (document.getElementById('deviceId').value) loadRecordings();
+  </script>
+</body>
+</html>
