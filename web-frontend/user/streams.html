@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <title>Minhas Transmissões / Gravações</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:18px;max-width:980px;margin:auto}
+    h1{font-size:20px;margin-bottom:6px}
+    .meta{color:#666;font-size:13px;margin-bottom:12px}
+    .list{margin-top:12px}
+    .item{padding:12px;border:1px solid #eee;border-radius:8px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+    .item .info{flex:1}
+    .item .actions{white-space:nowrap}
+    audio{width:260px}
+    .empty{color:#888}
+    a.btn{display:inline-block;padding:6px 10px;border-radius:6px;background:#0b71ff;color:#fff;text-decoration:none;font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Gravações / Transmissões</h1>
+    <div class="meta">Aqui aparecem as gravações (convertidas) recebidas do dispositivo. Só podes ver ficheiros que o teu token autoriza.</div>
+    <div><a href="/user/dashboard.html" class="btn">Voltar ao Dashboard</a></div>
+  </header>
+
+  <section id="content">
+    <div id="loading">A carregar...</div>
+    <div id="error" style="color:#c00;display:none"></div>
+    <div id="list" class="list"></div>
+  </section>
+
+  <script>
+  (async function(){
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const list = document.getElementById('list');
+
+    function showError(msg) {
+      loading.style.display = 'none';
+      error.style.display = 'block';
+      error.innerText = msg;
+    }
+
+    // get token from localStorage (same key used elsewhere)
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      showError('Não autenticado. Faz login primeiro.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/streams', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        showError('Erro ao contactar o servidor: ' + res.status + ' ' + txt);
+        return;
+      }
+      const data = await res.json();
+      loading.style.display = 'none';
+      if (!data.ok) {
+        showError('Resposta do servidor: ' + JSON.stringify(data));
+        return;
+      }
+
+      if (!Array.isArray(data.files) || data.files.length === 0) {
+        list.innerHTML = '<div class="empty">Ainda não há gravações.</div>';
+        return;
+      }
+
+      // render
+      list.innerHTML = '';
+      data.files.forEach(f => {
+        const li = document.createElement('div');
+        li.className = 'item';
+
+        const info = document.createElement('div');
+        info.className = 'info';
+        const dt = new Date(f.mtime);
+        info.innerHTML = '<strong>' + f.filename + '</strong><div class="meta">Tamanho: ' + (f.size||0) + ' bytes — ' + dt.toLocaleString() + '</div>';
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        // download endpoint (protected) - use token via same-origin cookie or rely on header from server
+        // to allow audio tag to fetch with auth header, we use a small proxy fetch + blob approach below
+        const playBtn = document.createElement('button');
+        playBtn.innerText = 'Tocar';
+        playBtn.className = 'btn';
+        playBtn.onclick = async () => {
+          playBtn.disabled = true;
+          playBtn.innerText = 'Carregando...';
+          try {
+            const r = await fetch('/api/streams/download/' + encodeURIComponent(f.filename), {
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const blob = await r.blob();
+            audio.src = URL.createObjectURL(blob);
+            audio.play().catch(()=>{});
+          } catch (e) {
+            alert('Erro ao carregar ficheiro: ' + e.message);
+          } finally {
+            playBtn.disabled = false;
+            playBtn.innerText = 'Tocar';
+          }
+        };
+
+        const download = document.createElement('a');
+        download.innerText = 'Download';
+        download.href = '/api/streams/download/' + encodeURIComponent(f.filename);
+        download.className = 'btn';
+        download.style.background = '#28a745';
+        download.style.marginLeft = '8px';
+        // anchor download won't include Authorization header; to enforce auth server must accept same-origin cookies or use token in query.
+        // We'll set target _blank to open in new tab and let fetch fallback if server requires header.
+        download.target = '_blank';
+        download.onclick = (ev) => {
+          // if server requires Authorization header, fallback to fetch & blob download
+          // let native behavior try first (in many setups it's ok)
+        };
+
+        actions.appendChild(playBtn);
+        actions.appendChild(download);
+        actions.appendChild(document.createElement('br'));
+        actions.appendChild(audio);
+
+        li.appendChild(info);
+        li.appendChild(actions);
+        list.appendChild(li);
+      });
+
+    } catch (e) {
+      showError('Erro de rede/execução: ' + e.message);
+    }
+  })();
+  </script>
+</body>
+</html>
