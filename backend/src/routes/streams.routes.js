@@ -28,6 +28,6 @@ router.get('/download/:file', /* auth.adminOrOwner */ (req, res) => {
   const full = path.join(OUT_DIR, file);
   if (!fs.existsSync(full)) return res.status(404).send('not found');
   res.download(full);
-});
+}); 
 
 module.exports = router;
