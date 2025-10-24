@@ -35,7 +35,7 @@ app.use('/api', require('./src/routes'));
 
 // static frontend
 app.use('/', express.static(path.join(__dirname, '../web-frontend')));
-
+app.use('/api/streams', require('./routes/streams.routes'));
 // error / fallback
 app.use((req, res) => res.status(404).json({ error: 'not_found' }));
 
